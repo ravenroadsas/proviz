@@ -13,6 +13,7 @@
 .pv_border <- "#e1e0d9"
 .pv_page_bg <- "#f7f7f5"
 .pv_surface <- "#ffffff"
+.pv_track_bg <- "#ece9e3"
 
 ## Categorical order for the one chart that genuinely needs to distinguish
 ## several identities (workload by role) -- fixed order, never cycled, per
@@ -69,13 +70,20 @@ pv_theme <- function() {
       .pv-badge { display: inline-flex; align-items: center; gap: 0.35rem; padding: 0.15rem 0.55rem;
         border-radius: 999px; font-size: 0.78rem; font-weight: 500; }
       .pv-badge .pv-dot { width: 0.5rem; height: 0.5rem; border-radius: 50%%; flex-shrink: 0; }
+
+      .pv-cellbar { display: flex; flex-direction: column; gap: 0.25rem; min-width: 64px; padding: 0.15rem 0; }
+      .pv-cellbar-value { font-size: 0.85rem; font-weight: 600; color: %s; font-variant-numeric: tabular-nums; }
+      .pv-cellbar-track { height: 5px; background: %s; border-radius: 3px; overflow: hidden; }
+      .pv-cellbar-fill { height: 100%%; background: %s; border-radius: 3px; }
+      .pv-cellbar-empty { color: %s; }
     ", .pv_surface, .pv_border, .pv_ink, .pv_ink_secondary, .pv_accent, .pv_accent,
       .pv_surface, .pv_border, .pv_border, .pv_ink,
       .pv_accent, .pv_accent, .pv_accent_dark, .pv_accent_dark, .pv_ink_secondary, .pv_border,
       .pv_ink_muted, .pv_border, .pv_accent_soft,
       .pv_surface, .pv_border, .pv_accent,
       .pv_accent_soft, .pv_accent,
-      .pv_ink_muted, .pv_ink
+      .pv_ink_muted, .pv_ink,
+      .pv_ink, .pv_track_bg, .pv_accent, .pv_ink_muted
     ))
 }
 
@@ -123,5 +131,26 @@ pv_status_badge <- function(status) {
   sprintf(
     '<span class="pv-badge" style="background:%s1a;color:%s;"><span class="pv-dot" style="background:%s;"></span>%s</span>',
     color, .pv_ink_secondary, color, label
+  )
+}
+
+#' A table cell showing a value alongside a thin proportional bar -- lets a
+#' column like conformance or usage be scanned and compared at a glance
+#' (bar length), not just read number by number. HTML, for use in a DT
+#' column with `escape = FALSE`.
+#' @param value_label the text to show (already formatted, e.g. `"84%"` or
+#'   `"220"`); `NA` renders as a plain dash, no bar.
+#' @param pct the bar's fill, 0-100 (clamped); `NA` renders as a plain dash.
+#'   For a naturally 0-100 value (a percentage) pass it directly; for a
+#'   raw count, scale it relative to the column's max first (see callers).
+#' @noRd
+pv_cell_bar <- function(value_label, pct) {
+  if (is.na(value_label) || is.na(pct)) {
+    return('<span class="pv-cellbar-empty">--</span>')
+  }
+  pct <- max(0, min(100, pct))
+  sprintf(
+    '<div class="pv-cellbar"><span class="pv-cellbar-value">%s</span><div class="pv-cellbar-track"><div class="pv-cellbar-fill" style="width:%s%%;"></div></div></div>',
+    value_label, pct
   )
 }

@@ -162,12 +162,20 @@ mod_deepdive_server <- function(id, pv_con, registry, selected_process) {
 
     output$variant_table <- DT::renderDT({
       variants <- pv_variant_table(filtered_events(), ideal_process())
+      conformance_pct <- round(100 * variants$mean_conformance)
+      variants$pct <- vapply(seq_len(nrow(variants)), function(i) {
+        pv_cell_bar(paste0(variants$pct[i], "%"), variants$pct[i])
+      }, character(1))
+      variants$mean_conformance <- vapply(seq_len(nrow(variants)), function(i) {
+        label <- if (is.na(conformance_pct[i])) NA_character_ else paste0(conformance_pct[i], "%")
+        pv_cell_bar(label, conformance_pct[i])
+      }, character(1))
       DT::datatable(
         variants,
-        colnames = c("Trace", "Cases", "%", "Avg. conformance"),
-        rownames = FALSE, options = list(pageLength = 5, dom = "tp"),
+        colnames = c("Trace", "Cases", "Share", "Conformance"),
+        rownames = FALSE, escape = FALSE, options = list(pageLength = 5, dom = "tp"),
         class = "compact stripe"
-      ) |> DT::formatPercentage("mean_conformance", digits = 0)
+      )
     })
 
     output$duration_plot <- plotly::renderPlotly({
@@ -216,12 +224,16 @@ mod_deepdive_server <- function(id, pv_con, registry, selected_process) {
     output$worst_cases_table <- DT::renderDT({
       shiny::req(ideal_process())
       conf <- pv_process_conformance(filtered_events(), ideal_process())
-      conf <- conf[order(conf$score), ]
+      conf <- utils::head(conf[order(conf$score), ], 10)
+      score_pct <- round(100 * conf$score)
+      conf$score <- vapply(seq_len(nrow(conf)), function(i) {
+        pv_cell_bar(paste0(score_pct[i], "%"), score_pct[i])
+      }, character(1))
       DT::datatable(
-        utils::head(conf, 10),
+        conf,
         colnames = c("Case", "Conformance", "Activities"),
-        rownames = FALSE, options = list(dom = "t"), class = "compact stripe"
-      ) |> DT::formatPercentage("score", digits = 0)
+        rownames = FALSE, escape = FALSE, options = list(dom = "t"), class = "compact stripe"
+      )
     })
   })
 }

@@ -74,18 +74,30 @@ mod_overview_server <- function(id, pv_con, registry) {
 
     display_table <- shiny::reactive({
       grid <- kpi_grid()
+
+      # Runs has no natural 0-100 scale (a raw case count) -- bar length is
+      # scaled relative to the busiest instrumented process in this table,
+      # so the row-to-row comparison ("who's actually used the most") is
+      # the thing the bar shows, not an absolute unit.
+      max_runs <- suppressWarnings(max(grid$n_cases, na.rm = TRUE))
+      runs_pct <- if (is.finite(max_runs) && max_runs > 0) {
+        100 * grid$n_cases / max_runs
+      } else {
+        rep(NA_real_, length(grid$n_cases))
+      }
+      conformance_pct <- round(100 * grid$conformance_median)
+      conformance_label <- ifelse(is.na(conformance_pct), NA_character_, paste0(conformance_pct, "%"))
+
       data.frame(
         process_id = grid$process_id,
         Process = grid$process,
         Macroprocess = grid$macroprocess,
         Owner = grid$owner,
         Status = vapply(grid$status, pv_status_badge, character(1)),
-        Runs = grid$n_cases,
+        Runs = vapply(seq_len(nrow(grid)), function(i) pv_cell_bar(as.character(grid$n_cases[i]), runs_pct[i]), character(1)),
         `Median duration` = pv_format_duration(grid$median_duration_mins),
         Users = grid$n_users,
-        Conformance = ifelse(is.na(grid$conformance_median), NA_character_,
-          sprintf("%.0f%%", 100 * grid$conformance_median)
-        ),
+        Conformance = vapply(seq_len(nrow(grid)), function(i) pv_cell_bar(conformance_label[i], conformance_pct[i]), character(1)),
         check.names = FALSE, stringsAsFactors = FALSE
       )
     })
