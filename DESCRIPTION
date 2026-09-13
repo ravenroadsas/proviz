@@ -1,0 +1,22 @@
+Package: proviz
+Title: Process Mining Analysis and Authoring Tools for Protrace
+Version: 0.0.0.9000
+Authors@R: person("Frenk", "Giorgetti", email = "frenk.giorgetti@gmail.com", role = c("aut", "cre"))
+Description: Companion analysis package to protrace: turns
+    protrace_event logs into bupaR eventlogs and process-mining reports,
+    and provides authoring aids for instrumenting a new Shiny application --
+    starting with a static-analysis scanner that inventories an app's
+    inputs, observers, and UI widgets as candidate hook points for a human
+    to map onto a business process (see protrace's process mining
+    playbook). Kept separate from protrace so instrumenting an application
+    never requires this package's heavier dependencies.
+License: MIT + file LICENSE
+Encoding: UTF-8
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.3.1
+Imports:
+    utils
+Suggests:
+    testthat (>= 3.0.0),
+    withr
+Config/testthat/edition: 3
