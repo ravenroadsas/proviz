@@ -30,6 +30,17 @@ mod_deepdive_ui <- function(id) {
     ),
     bslib::card(
       fill = FALSE,
+      bslib::card_header("Outcomes"),
+      shiny::helpText(
+        style = "padding: 0 0.95rem;",
+        "How this process actually ended -- a deliverable, one or more named decisions, or (for a case with ",
+        "none yet) incomplete. Which decision fired is a business result, not a conformance defect: see the ",
+        "conformance chart below for whether the right steps were followed to get there."
+      ),
+      DT::DTOutput(ns("outcomes_table"), fill = FALSE)
+    ),
+    bslib::card(
+      fill = FALSE,
       bslib::card_header(
         shiny::div(
           style = "display: flex; justify-content: space-between; align-items: center;",
@@ -140,6 +151,24 @@ mod_deepdive_server <- function(id, pv_con, registry, selected_process) {
     output$kpi_conformance <- shiny::renderText({
       cm <- kpis()$conformance_median
       if (is.na(cm)) "--" else sprintf("%.0f%%", 100 * cm)
+    })
+
+    output$outcomes_table <- DT::renderDT({
+      shiny::req(ideal_process())
+      dist <- pv_outcome_distribution(filtered_events(), ideal_process())
+      shiny::validate(shiny::need(nrow(dist) > 0, "No outcomes declared for this process yet."))
+
+      kind_label <- c(deliverable = "Deliverable", decision = "Decision")
+      tier_label <- c(operational = "Operational", tactical = "Tactical", strategic = "Strategic")
+
+      display <- data.frame(
+        Outcome = dist$label,
+        Kind = vapply(unname(kind_label[dist$kind]), pv_type_badge, character(1)),
+        Tier = vapply(unname(tier_label[dist$tier]), pv_type_badge, character(1)),
+        Cases = vapply(seq_len(nrow(dist)), function(i) pv_cell_bar(as.character(dist$n_cases[i]), dist$pct[i]), character(1)),
+        stringsAsFactors = FALSE
+      )
+      DT::datatable(display, rownames = FALSE, escape = FALSE, options = list(dom = "t"), class = "compact stripe")
     })
 
     output$process_map <- shiny::renderUI({

@@ -11,10 +11,14 @@
 #'   package = "proviz")`) -- pass an explicit path to use a real
 #'   organization-specific registry instead.
 #' @return a `pv_registry` object (a list): `$processes` (one row per
-#'   process: `process_id`, `macroprocess`, `process`, `owner`, `status`),
+#'   process: `process_id`, `macroprocess`, `process`, `owner`, `status`,
+#'   `loop_length` -- `"short"`/`"medium"`/`"long"`, how immediate the
+#'   process's outcome and the data behind it are, e.g. daily production
+#'   surveillance is short-loop, reserves estimation is long-loop),
 #'   `$subprocesses` (one row per app/module a process spans: `process_id`,
-#'   `app`, `subprocess`, `duckdb_path` -- zero rows for a process with none
-#'   yet), and `$ideal` (a named list, keyed by `process_id`, of
+#'   `app`, `subprocess`, `duckdb_path` -- `NA` until the process is
+#'   `instrumented`, zero rows for a process with no app scoped yet), and
+#'   `$ideal` (a named list, keyed by `process_id`, of
 #'   [pv_load_ideal_process()] results -- `NULL` for a process with no
 #'   `ideal_process` entry or a missing file).
 #' @export
@@ -25,8 +29,9 @@ pv_load_registry <- function(path = system.file("registry/processes.yml", packag
     stop("proviz: registry at '", path, "' is empty or not a list of process entries", call. = FALSE)
   }
 
-  required_fields <- c("process_id", "macroprocess", "process", "owner", "status")
+  required_fields <- c("process_id", "macroprocess", "process", "owner", "status", "loop_length")
   valid_status <- c("not_started", "designed", "instrumented", "deprecated")
+  valid_loop_length <- c("short", "medium", "long")
   base_dir <- dirname(normalizePath(path, mustWork = TRUE))
 
   processes <- list()
@@ -47,10 +52,17 @@ pv_load_registry <- function(path = system.file("registry/processes.yml", packag
         call. = FALSE
       )
     }
+    if (!entry$loop_length %in% valid_loop_length) {
+      stop("proviz: registry entry '", entry$process_id, "' has invalid loop_length '", entry$loop_length,
+        "' -- must be one of: ", paste(valid_loop_length, collapse = ", "),
+        call. = FALSE
+      )
+    }
 
     processes[[length(processes) + 1]] <- data.frame(
       process_id = entry$process_id, macroprocess = entry$macroprocess,
       process = entry$process, owner = entry$owner, status = entry$status,
+      loop_length = entry$loop_length,
       stringsAsFactors = FALSE
     )
 
@@ -62,7 +74,12 @@ pv_load_registry <- function(path = system.file("registry/processes.yml", packag
       )
     }
     for (s in subs) {
-      sub_missing <- setdiff(c("app", "subprocess", "duckdb_path"), names(s))
+      # duckdb_path is only meaningful once there's a real store to attach --
+      # a not-yet-instrumented process can still declare which app(s) it
+      # will live in as soon as that's scoped (playbook step 2-3), before
+      # any instrumentation (step 4) exists.
+      required_sub_fields <- if (entry$status == "instrumented") c("app", "subprocess", "duckdb_path") else c("app", "subprocess")
+      sub_missing <- setdiff(required_sub_fields, names(s))
       if (length(sub_missing) > 0) {
         stop("proviz: a subprocess entry under '", entry$process_id,
           "' is missing required field(s): ", paste(sub_missing, collapse = ", "),
@@ -71,7 +88,7 @@ pv_load_registry <- function(path = system.file("registry/processes.yml", packag
       }
       subprocesses[[length(subprocesses) + 1]] <- data.frame(
         process_id = entry$process_id, app = s$app,
-        subprocess = s$subprocess, duckdb_path = s$duckdb_path,
+        subprocess = s$subprocess, duckdb_path = s$duckdb_path %||% NA_character_,
         stringsAsFactors = FALSE
       )
     }
@@ -120,7 +137,16 @@ pv_load_registry <- function(path = system.file("registry/processes.yml", packag
 #' @return a `pv_ideal_process` object (a list): `$process_id`,
 #'   `$activities` (a `data.frame`: `id`, `label`, `role`), `$variants` (a
 #'   list of character vectors -- each an acceptable activity-id sequence,
-#'   used by [pv_case_conformance()] as the reference set to score against).
+#'   used by [pv_case_conformance()] as the reference set to score against),
+#'   `$outcomes` (a `data.frame`, one row per named way this process can
+#'   end -- see [pv_case_outcome()]: `id`, `label`, `kind` (`"deliverable"`
+#'   or `"decision"`), `activity_id` (which activity in `$activities` logs
+#'   it), `tier` (`"operational"`/`"tactical"`/`"strategic"`, `NA` for a
+#'   deliverable), `outcome_tracking_app`/`outcome_tracking_join_key` (where
+#'   this decision's real-world result is tracked, if anywhere -- `NA` if
+#'   not tracked, or not yet linked). Zero rows if the process declares no
+#'   `outcomes` yet. `$outcome_exclusivity` (`"single"` or `"multi"` -- can
+#'   more than one outcome fire on the same case; defaults to `"single"`).
 #' @export
 pv_load_ideal_process <- function(path) {
   stopifnot(is.character(path), length(path) == 1, file.exists(path))
@@ -164,8 +190,72 @@ pv_load_ideal_process <- function(path) {
     )
   }
 
+  outcomes <- pv_parse_outcomes(spec$outcomes, activities, spec$process_id)
+  outcome_exclusivity <- spec$outcome_exclusivity %||% "single"
+  if (!outcome_exclusivity %in% c("single", "multi")) {
+    stop("proviz: ideal-process '", spec$process_id, "' has invalid outcome_exclusivity '",
+      outcome_exclusivity, "' -- must be 'single' or 'multi'",
+      call. = FALSE
+    )
+  }
+
   structure(
-    list(process_id = spec$process_id, activities = activities, variants = variants),
+    list(
+      process_id = spec$process_id, activities = activities, variants = variants,
+      outcomes = outcomes, outcome_exclusivity = outcome_exclusivity
+    ),
     class = "pv_ideal_process"
   )
+}
+
+#' @noRd
+pv_parse_outcomes <- function(spec_outcomes, activities, process_id) {
+  empty <- data.frame(
+    id = character(0), label = character(0), kind = character(0), activity_id = character(0),
+    tier = character(0), outcome_tracking_app = character(0), outcome_tracking_join_key = character(0),
+    stringsAsFactors = FALSE
+  )
+  if (is.null(spec_outcomes) || length(spec_outcomes) == 0) {
+    return(empty)
+  }
+
+  valid_kind <- c("deliverable", "decision")
+  valid_tier <- c("operational", "tactical", "strategic")
+
+  rows <- lapply(spec_outcomes, function(o) {
+    o_missing <- setdiff(c("id", "label", "kind", "activity_id"), names(o))
+    if (length(o_missing) > 0) {
+      stop("proviz: an outcome in '", process_id, "' is missing field(s): ",
+        paste(o_missing, collapse = ", "), call. = FALSE)
+    }
+    if (!o$kind %in% valid_kind) {
+      stop("proviz: outcome '", o$id, "' in '", process_id, "' has invalid kind '", o$kind,
+        "' -- must be one of: ", paste(valid_kind, collapse = ", "), call. = FALSE)
+    }
+    if (!o$activity_id %in% activities$id) {
+      stop("proviz: outcome '", o$id, "' in '", process_id,
+        "' references unknown activity_id '", o$activity_id, "'", call. = FALSE)
+    }
+    tier <- o$tier %||% NA_character_
+    if (o$kind == "decision" && !is.na(tier) && !tier %in% valid_tier) {
+      stop("proviz: outcome '", o$id, "' in '", process_id, "' has invalid tier '", tier,
+        "' -- must be one of: ", paste(valid_tier, collapse = ", "), call. = FALSE)
+    }
+    tracking <- o$outcome_tracking %||% list()
+    data.frame(
+      id = o$id, label = o$label, kind = o$kind, activity_id = o$activity_id, tier = tier,
+      outcome_tracking_app = tracking$app %||% NA_character_,
+      outcome_tracking_join_key = tracking$join_key %||% NA_character_,
+      stringsAsFactors = FALSE
+    )
+  })
+
+  outcomes <- do.call(rbind, rows)
+  rownames(outcomes) <- NULL
+  if (anyDuplicated(outcomes$id) != 0) {
+    dupes <- unique(outcomes$id[duplicated(outcomes$id)])
+    stop("proviz: ideal-process '", process_id, "' has duplicate outcome id(s): ",
+      paste(dupes, collapse = ", "), call. = FALSE)
+  }
+  outcomes
 }

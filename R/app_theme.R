@@ -31,59 +31,71 @@
 #' never reused as decoration) -- see [pv_status_badge()].
 #' @noRd
 pv_theme <- function() {
+  ## Built as small, independently-checkable blocks (each sprintf's arg
+  ## count matches its own placeholders) rather than one long positional
+  ## sprintf -- that got error-prone to extend safely once the rule count
+  ## grew past a couple dozen placeholders.
+  navbar_css <- sprintf("
+    .navbar { min-height: 52px; background: %s !important; border-bottom: 1px solid %s; box-shadow: none; }
+    .navbar .navbar-brand { font-weight: 700; color: %s; }
+    .navbar .nav-link { color: %s; font-weight: 500; padding-bottom: 0.9rem; border-bottom: 2px solid transparent; }
+    .navbar .nav-link.active { color: %s; border-bottom-color: %s; }
+    .navbar-text, .navbar .nav-link { font-size: 0.85rem; }
+  ", .pv_surface, .pv_border, .pv_ink, .pv_ink_secondary, .pv_accent, .pv_accent)
+
+  card_css <- sprintf("
+    .card { margin-bottom: 0.75rem; background: %s; border: 1px solid %s; box-shadow: 0 1px 2px rgba(11,11,11,0.04); }
+    .card-header { padding: 0.55rem 0.95rem; font-weight: 600; font-size: 0.82rem; background: transparent; border-bottom: 1px solid %s; color: %s; }
+    .card-body { padding: 0.75rem 0.95rem; }
+  ", .pv_surface, .pv_border, .pv_border, .pv_ink)
+
+  button_css <- sprintf("
+    .btn-primary { background: %s; border-color: %s; }
+    .btn-primary:hover { background: %s; border-color: %s; }
+    .btn-outline-secondary { color: %s; border-color: %s; }
+  ", .pv_accent, .pv_accent, .pv_accent_dark, .pv_accent_dark, .pv_ink_secondary, .pv_border)
+
+  table_css <- sprintf("
+    table.dataTable { font-size: 0.85rem; }
+    table.dataTable thead th { color: %s; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.03em; border-bottom: 1px solid %s !important; }
+    table.dataTable tbody tr:hover { background-color: %s !important; }
+  ", .pv_ink_muted, .pv_border, .pv_accent_soft)
+
+  kpi_css <- sprintf("
+    .pv-kpi-row { display: flex; flex-wrap: wrap; gap: 0.75rem; margin-bottom: 0.9rem; }
+    .pv-kpi { flex: 1 1 180px; display: flex; align-items: center; gap: 0.8rem;
+      background: %s; border: 1px solid %s; border-left: 4px solid %s;
+      border-radius: 0.5rem; padding: 0.85rem 1.05rem; box-shadow: 0 1px 2px rgba(11,11,11,0.04); }
+    .pv-kpi-icon { width: 2.2rem; height: 2.2rem; border-radius: 0.5rem; flex-shrink: 0;
+      background: %s; color: %s; display: flex; align-items: center; justify-content: center; font-size: 1rem; }
+    .pv-kpi-text { min-width: 0; }
+    .pv-kpi-title { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.04em; color: %s; font-weight: 600; margin-bottom: 0.1rem; }
+    .pv-kpi-value { font-size: 1.4rem; font-weight: 700; color: %s; line-height: 1.15; }
+  ", .pv_surface, .pv_border, .pv_accent, .pv_accent_soft, .pv_accent, .pv_ink_muted, .pv_ink)
+
+  badge_css <- sprintf("
+    .pv-badge { display: inline-flex; align-items: center; gap: 0.35rem; padding: 0.15rem 0.55rem;
+      border-radius: 999px; font-size: 0.78rem; font-weight: 500; }
+    .pv-badge .pv-dot { width: 0.5rem; height: 0.5rem; border-radius: 50%%; flex-shrink: 0; }
+    .pv-badge-neutral { background: %s; color: %s; border: 1px solid %s; }
+  ", .pv_track_bg, .pv_ink_secondary, .pv_border)
+
+  cellbar_css <- sprintf("
+    .pv-cellbar { display: flex; flex-direction: column; gap: 0.25rem; min-width: 64px; padding: 0.15rem 0; }
+    .pv-cellbar-value { font-size: 0.85rem; font-weight: 600; color: %s; font-variant-numeric: tabular-nums; }
+    .pv-cellbar-track { height: 5px; background: %s; border-radius: 3px; overflow: hidden; }
+    .pv-cellbar-fill { height: 100%%; background: %s; border-radius: 3px; }
+    .pv-cellbar-empty { color: %s; }
+  ", .pv_ink, .pv_track_bg, .pv_accent, .pv_ink_muted)
+
   bslib::bs_theme(
     version = 5, base_font = bslib::font_google("Inter"),
     bg = .pv_page_bg, fg = .pv_ink, primary = .pv_accent, secondary = .pv_ink_muted,
     "body-color" = .pv_ink, "border-radius" = "0.6rem", "border-color" = .pv_border
   ) |>
-    bslib::bs_add_rules(sprintf("
-      body { font-size: 0.92rem; }
-
-      .navbar { min-height: 52px; background: %s !important; border-bottom: 1px solid %s; box-shadow: none; }
-      .navbar .navbar-brand { font-weight: 700; color: %s; }
-      .navbar .nav-link { color: %s; font-weight: 500; padding-bottom: 0.9rem; border-bottom: 2px solid transparent; }
-      .navbar .nav-link.active { color: %s; border-bottom-color: %s; }
-      .navbar-text, .navbar .nav-link { font-size: 0.85rem; }
-
-      .card { margin-bottom: 0.75rem; background: %s; border: 1px solid %s; box-shadow: 0 1px 2px rgba(11,11,11,0.04); }
-      .card-header { padding: 0.55rem 0.95rem; font-weight: 600; font-size: 0.82rem; background: transparent; border-bottom: 1px solid %s; color: %s; }
-      .card-body { padding: 0.75rem 0.95rem; }
-
-      .btn-primary { background: %s; border-color: %s; }
-      .btn-primary:hover { background: %s; border-color: %s; }
-      .btn-outline-secondary { color: %s; border-color: %s; }
-
-      table.dataTable { font-size: 0.85rem; }
-      table.dataTable thead th { color: %s; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.03em; border-bottom: 1px solid %s !important; }
-      table.dataTable tbody tr:hover { background-color: %s !important; }
-
-      .pv-kpi-row { display: flex; flex-wrap: wrap; gap: 0.75rem; margin-bottom: 0.9rem; }
-      .pv-kpi { flex: 1 1 180px; display: flex; align-items: center; gap: 0.8rem;
-        background: %s; border: 1px solid %s; border-left: 4px solid %s;
-        border-radius: 0.5rem; padding: 0.85rem 1.05rem; box-shadow: 0 1px 2px rgba(11,11,11,0.04); }
-      .pv-kpi-icon { width: 2.2rem; height: 2.2rem; border-radius: 0.5rem; flex-shrink: 0;
-        background: %s; color: %s; display: flex; align-items: center; justify-content: center; font-size: 1rem; }
-      .pv-kpi-text { min-width: 0; }
-      .pv-kpi-title { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.04em; color: %s; font-weight: 600; margin-bottom: 0.1rem; }
-      .pv-kpi-value { font-size: 1.4rem; font-weight: 700; color: %s; line-height: 1.15; }
-
-      .pv-badge { display: inline-flex; align-items: center; gap: 0.35rem; padding: 0.15rem 0.55rem;
-        border-radius: 999px; font-size: 0.78rem; font-weight: 500; }
-      .pv-badge .pv-dot { width: 0.5rem; height: 0.5rem; border-radius: 50%%; flex-shrink: 0; }
-
-      .pv-cellbar { display: flex; flex-direction: column; gap: 0.25rem; min-width: 64px; padding: 0.15rem 0; }
-      .pv-cellbar-value { font-size: 0.85rem; font-weight: 600; color: %s; font-variant-numeric: tabular-nums; }
-      .pv-cellbar-track { height: 5px; background: %s; border-radius: 3px; overflow: hidden; }
-      .pv-cellbar-fill { height: 100%%; background: %s; border-radius: 3px; }
-      .pv-cellbar-empty { color: %s; }
-    ", .pv_surface, .pv_border, .pv_ink, .pv_ink_secondary, .pv_accent, .pv_accent,
-      .pv_surface, .pv_border, .pv_border, .pv_ink,
-      .pv_accent, .pv_accent, .pv_accent_dark, .pv_accent_dark, .pv_ink_secondary, .pv_border,
-      .pv_ink_muted, .pv_border, .pv_accent_soft,
-      .pv_surface, .pv_border, .pv_accent,
-      .pv_accent_soft, .pv_accent,
-      .pv_ink_muted, .pv_ink,
-      .pv_ink, .pv_track_bg, .pv_accent, .pv_ink_muted
+    bslib::bs_add_rules(paste0(
+      "body { font-size: 0.92rem; }\n",
+      navbar_css, card_css, button_css, table_css, kpi_css, badge_css, cellbar_css
     ))
 }
 
@@ -153,4 +165,16 @@ pv_cell_bar <- function(value_label, pct) {
     '<div class="pv-cellbar"><span class="pv-cellbar-value">%s</span><div class="pv-cellbar-track"><div class="pv-cellbar-fill" style="width:%s%%;"></div></div></div>',
     value_label, pct
   )
+}
+
+#' A plain descriptive label chip (no color-coded meaning) -- for
+#' classification columns like loop length or outcome shape, where the
+#' point is a quick label to scan, not a status to react to. HTML, for use
+#' in a DT column with `escape = FALSE`. `NA` renders as a plain dash.
+#' @noRd
+pv_type_badge <- function(label) {
+  if (is.na(label)) {
+    return('<span class="pv-cellbar-empty">--</span>')
+  }
+  sprintf('<span class="pv-badge pv-badge-neutral">%s</span>', label)
 }

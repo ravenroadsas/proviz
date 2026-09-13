@@ -91,3 +91,9 @@ variants:
   - Postulate_For_Review
   - Super_User_Review
   - Publish_Official
+outcomes:
+- id: publish_official
+  label: Type curve published (Official)
+  kind: deliverable
+  activity_id: Publish_Official
+outcome_exclusivity: single

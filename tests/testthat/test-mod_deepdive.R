@@ -24,5 +24,10 @@ test_that("mod_deepdive_server computes KPIs and variants once a process is pick
 
     variants <- pv_variant_table(filtered_events(), ideal_process())
     expect_equal(variants$trace, "a -> b")
+
+    dist <- pv_outcome_distribution(filtered_events(), ideal_process())
+    expect_equal(dist$label, "B done")
+    expect_equal(dist$n_cases, 1)
+    expect_true(nzchar(output$outcomes_table)) # renders without error
   })
 })

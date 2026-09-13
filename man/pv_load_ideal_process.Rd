@@ -15,7 +15,16 @@ pv_load_ideal_process(path)
 a \code{pv_ideal_process} object (a list): \verb{$process_id},
 \verb{$activities} (a \code{data.frame}: \code{id}, \code{label}, \code{role}), \verb{$variants} (a
 list of character vectors -- each an acceptable activity-id sequence,
-used by \code{\link[=pv_case_conformance]{pv_case_conformance()}} as the reference set to score against).
+used by \code{\link[=pv_case_conformance]{pv_case_conformance()}} as the reference set to score against),
+\verb{$outcomes} (a \code{data.frame}, one row per named way this process can
+end -- see \code{\link[=pv_case_outcome]{pv_case_outcome()}}: \code{id}, \code{label}, \code{kind} (\code{"deliverable"}
+or \code{"decision"}), \code{activity_id} (which activity in \verb{$activities} logs
+it), \code{tier} (\code{"operational"}/\code{"tactical"}/\code{"strategic"}, \code{NA} for a
+deliverable), \code{outcome_tracking_app}/\code{outcome_tracking_join_key} (where
+this decision's real-world result is tracked, if anywhere -- \code{NA} if
+not tracked, or not yet linked). Zero rows if the process declares no
+\code{outcomes} yet. \verb{$outcome_exclusivity} (\code{"single"} or \code{"multi"} -- can
+more than one outcome fire on the same case; defaults to \code{"single"}).
 }
 \description{
 Load and validate an ideal-process definition

@@ -61,6 +61,7 @@ pv_demo_registry <- function(dir = tempfile("proviz_demo_"), seed = 42) {
     ),
     owner = c("Reservoir Engineering Lead", "Production Engineering Lead", "Completions Lead", "Ops Lead"),
     status = c("instrumented", "instrumented", "not_started", "deprecated"),
+    loop_length = c("medium", "short", "medium", "short"),
     stringsAsFactors = FALSE
   )
   subprocesses <- data.frame(

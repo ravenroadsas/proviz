@@ -27,6 +27,15 @@ activities:
 - id: Forecast_Update
   label: Update Production Forecast / Decline Curve
   role: Production Engineer
+- id: Decide_No_Action
+  label: 'Decision: No Action Required'
+  role: Production Engineer
+- id: Decide_Change_ESP_Frequency
+  label: 'Decision: Change ESP Frequency'
+  role: Production Engineer
+- id: Decide_Propose_Workover
+  label: 'Decision: Propose Workover'
+  role: Production Engineer
 - id: Surveillance_Reporting
   label: Log Findings in Daily Surveillance Report
   role: Surveillance Analyst
@@ -43,6 +52,7 @@ variants:
   - Variance_Analysis
   - Well_Anomaly_Screening
   - Exception_Prioritization
+  - Decide_No_Action
   - Surveillance_Reporting
   - Report_Signoff
 - - Data_Ingestion
@@ -52,6 +62,7 @@ variants:
   - Well_Anomaly_Screening
   - Exception_Prioritization
   - Root_Cause_Diagnostics
+  - Decide_Change_ESP_Frequency
   - Surveillance_Reporting
   - Report_Signoff
 - - Data_Ingestion
@@ -61,6 +72,7 @@ variants:
   - Well_Anomaly_Screening
   - Exception_Prioritization
   - Root_Cause_Diagnostics
+  - Decide_Change_ESP_Frequency
   - Surveillance_Reporting
   - Issue_Escalation
   - Report_Signoff
@@ -72,6 +84,7 @@ variants:
   - Exception_Prioritization
   - Root_Cause_Diagnostics
   - Forecast_Update
+  - Decide_Propose_Workover
   - Surveillance_Reporting
   - Report_Signoff
 - - Data_Ingestion
@@ -82,6 +95,7 @@ variants:
   - Exception_Prioritization
   - Root_Cause_Diagnostics
   - Forecast_Update
+  - Decide_Propose_Workover
   - Surveillance_Reporting
   - Issue_Escalation
   - Report_Signoff
@@ -92,6 +106,7 @@ variants:
   - Well_Anomaly_Screening
   - Artificial_Lift_Review
   - Exception_Prioritization
+  - Decide_No_Action
   - Surveillance_Reporting
   - Report_Signoff
 - - Data_Ingestion
@@ -102,6 +117,7 @@ variants:
   - Artificial_Lift_Review
   - Exception_Prioritization
   - Root_Cause_Diagnostics
+  - Decide_Change_ESP_Frequency
   - Surveillance_Reporting
   - Report_Signoff
 - - Data_Ingestion
@@ -112,6 +128,7 @@ variants:
   - Artificial_Lift_Review
   - Exception_Prioritization
   - Root_Cause_Diagnostics
+  - Decide_Change_ESP_Frequency
   - Surveillance_Reporting
   - Issue_Escalation
   - Report_Signoff
@@ -124,6 +141,7 @@ variants:
   - Exception_Prioritization
   - Root_Cause_Diagnostics
   - Forecast_Update
+  - Decide_Propose_Workover
   - Surveillance_Reporting
   - Report_Signoff
 - - Data_Ingestion
@@ -135,6 +153,35 @@ variants:
   - Exception_Prioritization
   - Root_Cause_Diagnostics
   - Forecast_Update
+  - Decide_Propose_Workover
   - Surveillance_Reporting
   - Issue_Escalation
   - Report_Signoff
+outcomes:
+- id: no_action
+  label: 'Decision: No Action Required'
+  kind: decision
+  activity_id: Decide_No_Action
+  tier: operational
+- id: change_esp_frequency
+  label: 'Decision: Change ESP Frequency'
+  kind: decision
+  activity_id: Decide_Change_ESP_Frequency
+  tier: operational
+  outcome_tracking:
+    app: esp_monitoring
+    join_key: well_id
+- id: propose_workover
+  label: 'Decision: Propose Workover'
+  kind: decision
+  activity_id: Decide_Propose_Workover
+  tier: tactical
+  outcome_tracking:
+    app: workover_planner
+    join_key: well_id
+- id: escalate_to_engineering
+  label: 'Decision: Escalate to Engineering'
+  kind: decision
+  activity_id: Issue_Escalation
+  tier: tactical
+outcome_exclusivity: multi

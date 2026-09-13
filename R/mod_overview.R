@@ -1,4 +1,33 @@
 #' @noRd
+pv_loop_label <- function(loop_length) {
+  c(short = "Short loop", medium = "Medium loop", long = "Long loop")[loop_length]
+}
+
+#' The shape of how a process ends: deliverable, decision, or a mix of
+#' both -- derived from its declared outcomes, not a separately-maintained
+#' field, so it can't drift out of sync with them.
+#' @noRd
+pv_outcome_shape <- function(ideal_process) {
+  if (is.null(ideal_process) || is.null(ideal_process$outcomes) || nrow(ideal_process$outcomes) == 0) {
+    return(NA_character_)
+  }
+  kinds <- unique(ideal_process$outcomes$kind)
+  if (length(kinds) > 1) "Hybrid" else c(deliverable = "Deliverable", decision = "Decision")[kinds]
+}
+
+#' Comma-joined app names per process, from the registry's own
+#' `subprocesses` list -- populated as soon as app(s) are scoped for a
+#' process (registration time), not only once instrumented.
+#' @noRd
+pv_apps_by_process <- function(subprocesses, process_ids) {
+  apps <- vapply(process_ids, function(pid) {
+    row_apps <- unique(subprocesses$app[subprocesses$process_id == pid])
+    if (length(row_apps) == 0) NA_character_ else paste(row_apps, collapse = ", ")
+  }, character(1))
+  unname(apps)
+}
+
+#' @noRd
 pv_format_duration <- function(mins) {
   vapply(mins, function(m) {
     if (is.na(m)) {
@@ -88,12 +117,17 @@ mod_overview_server <- function(id, pv_con, registry) {
       conformance_pct <- round(100 * grid$conformance_median)
       conformance_label <- ifelse(is.na(conformance_pct), NA_character_, paste0(conformance_pct, "%"))
 
+      outcome_shapes <- vapply(grid$process_id, function(pid) pv_outcome_shape(registry()$ideal[[pid]]), character(1))
+
       data.frame(
         process_id = grid$process_id,
         Process = grid$process,
         Macroprocess = grid$macroprocess,
+        Applications = pv_apps_by_process(registry()$subprocesses, grid$process_id),
         Owner = grid$owner,
         Status = vapply(grid$status, pv_status_badge, character(1)),
+        Loop = vapply(pv_loop_label(grid$loop_length), pv_type_badge, character(1), USE.NAMES = FALSE),
+        Outcome = vapply(outcome_shapes, pv_type_badge, character(1), USE.NAMES = FALSE),
         Runs = vapply(seq_len(nrow(grid)), function(i) pv_cell_bar(as.character(grid$n_cases[i]), runs_pct[i]), character(1)),
         `Median duration` = pv_format_duration(grid$median_duration_mins),
         Users = grid$n_users,
@@ -106,7 +140,7 @@ mod_overview_server <- function(id, pv_con, registry) {
       DT::datatable(
         display_table()[, -1], # hide process_id, kept for row-selection lookup
         selection = "single", rownames = FALSE, escape = FALSE,
-        options = list(dom = "tp", pageLength = 10, autoWidth = TRUE)
+        options = list(dom = "tp", pageLength = 10, autoWidth = TRUE, scrollX = TRUE)
       )
     })
 

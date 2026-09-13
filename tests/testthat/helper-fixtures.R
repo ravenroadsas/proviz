@@ -21,6 +21,7 @@ local_fixture_registry <- function(env = parent.frame()) {
         macroprocess = c("reservoir_engineering", "ops"),
         process = c("Type Curve Construction", "Not Yet Started"),
         owner = c("x", "y"), status = c("instrumented", "not_started"),
+        loop_length = c("medium", "medium"),
         stringsAsFactors = FALSE
       ),
       subprocesses = data.frame(
@@ -28,7 +29,18 @@ local_fixture_registry <- function(env = parent.frame()) {
         subprocess = "type_curve_module", duckdb_path = db_path, stringsAsFactors = FALSE
       ),
       ideal = list(
-        type_curve_construction = structure(list(variants = list(c("a", "b"))), class = "pv_ideal_process"),
+        type_curve_construction = structure(
+          list(
+            variants = list(c("a", "b")),
+            outcomes = data.frame(
+              id = "b_done", label = "B done", kind = "deliverable", activity_id = "b",
+              tier = NA_character_, outcome_tracking_app = NA_character_, outcome_tracking_join_key = NA_character_,
+              stringsAsFactors = FALSE
+            ),
+            outcome_exclusivity = "single"
+          ),
+          class = "pv_ideal_process"
+        ),
         not_yet = NULL
       )
     ),

@@ -13,11 +13,23 @@
 #   deprecated   -- retired; kept for history, excluded from coverage's
 #                   denominator
 #
-# ideal_process: path (relative to this file's directory) to the
-# activities+variants YAML pv_load_ideal_process() reads.
+# loop_length: short | medium | long -- how immediate the process's
+# outcome and the data behind it are, not how long the process itself
+# takes to run. Daily production surveillance is short-loop (decision and
+# feedback within a day or two); type curve construction is medium-loop
+# (a curve's real quality shows up over weeks/months of new well data);
+# reserves estimation would be long-loop (the outcome plays out over years).
 #
-# subprocesses: only meaningful once status == instrumented -- one entry
-# per app/module this process spans, each naming the local DuckDB file
+# ideal_process: path (relative to this file's directory) to the
+# activities+variants+outcomes YAML pv_load_ideal_process() reads -- see
+# that file's `outcomes` block for how each process ends (a deliverable,
+# one or more named decisions, or both) and which app (if any) tracks each
+# decision's eventual real-world result.
+#
+# subprocesses: app/module(s) this process spans. `app`/`subprocess` can
+# be declared as soon as they're scoped (Step 2-3 of the playbook, before
+# any instrumentation exists); `duckdb_path` is required only once
+# status == instrumented, naming the local DuckDB file
 # pv_connect_registry() will ATTACH.
 
 - process_id: type_curve_construction
@@ -25,6 +37,7 @@
   process: "Type Curve Construction"
   owner: "Reservoir Engineering Lead"
   status: instrumented
+  loop_length: medium
   ideal_process: ideal_processes/type_curve_construction.yml
   subprocesses:
     - app: typecurves
@@ -36,5 +49,8 @@
   process: "Daily Production Surveillance"
   owner: "Production Engineering Lead"
   status: designed
+  loop_length: short
   ideal_process: ideal_processes/daily_production_surveillance.yml
-  subprocesses: []
+  subprocesses:
+    - app: surveillance
+      subprocess: surveillance_app

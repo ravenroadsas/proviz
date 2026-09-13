@@ -15,10 +15,14 @@ organization-specific registry instead.}
 }
 \value{
 a \code{pv_registry} object (a list): \verb{$processes} (one row per
-process: \code{process_id}, \code{macroprocess}, \code{process}, \code{owner}, \code{status}),
+process: \code{process_id}, \code{macroprocess}, \code{process}, \code{owner}, \code{status},
+\code{loop_length} -- \code{"short"}/\code{"medium"}/\code{"long"}, how immediate the
+process's outcome and the data behind it are, e.g. daily production
+surveillance is short-loop, reserves estimation is long-loop),
 \verb{$subprocesses} (one row per app/module a process spans: \code{process_id},
-\code{app}, \code{subprocess}, \code{duckdb_path} -- zero rows for a process with none
-yet), and \verb{$ideal} (a named list, keyed by \code{process_id}, of
+\code{app}, \code{subprocess}, \code{duckdb_path} -- \code{NA} until the process is
+\code{instrumented}, zero rows for a process with no app scoped yet), and
+\verb{$ideal} (a named list, keyed by \code{process_id}, of
 \code{\link[=pv_load_ideal_process]{pv_load_ideal_process()}} results -- \code{NULL} for a process with no
 \code{ideal_process} entry or a missing file).
 }

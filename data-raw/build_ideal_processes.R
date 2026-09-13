@@ -33,12 +33,26 @@ surveillance_activities <- list(
   list(id = "Exception_Prioritization", label = "Prioritize Flagged Deviations",               role = "Production Engineer"),
   list(id = "Root_Cause_Diagnostics",   label = "Diagnose Root Cause on Flagged Wells",        role = "Reliability Engineer"),
   list(id = "Forecast_Update",          label = "Update Production Forecast / Decline Curve",  role = "Production Engineer"),
+  ## Decision activities -- this short-loop process ends in one of several
+  ## named, material decisions (never a data deliverable), and more than one
+  ## can fire on the same case (a workover proposal can co-occur with an
+  ## escalation) -- see the `outcomes` block below.
+  list(id = "Decide_No_Action",             label = "Decision: No Action Required",     role = "Production Engineer"),
+  list(id = "Decide_Change_ESP_Frequency",  label = "Decision: Change ESP Frequency",   role = "Production Engineer"),
+  list(id = "Decide_Propose_Workover",      label = "Decision: Propose Workover",       role = "Production Engineer"),
   list(id = "Surveillance_Reporting",   label = "Log Findings in Daily Surveillance Report",   role = "Surveillance Analyst"),
   list(id = "Issue_Escalation",         label = "Escalate Critical Issue to Ops/Engineering",  role = "Shift Supervisor"),
   list(id = "Report_Signoff",           label = "Review & Sign Off Daily Report",              role = "Shift Supervisor")
 )
 
-## Mirrors build_case_sequence() in tests/R/01_ideal_process.R exactly.
+## Mirrors build_case_sequence() in tests/R/01_ideal_process.R, with one
+## addition: a named decision activity ahead of reporting/signoff. Which
+## decision fires is fully determined by the existing branch flags (no new
+## combinatorics) -- no exception found means no action needed; otherwise
+## the engineer decides between a smaller operational fix (ESP frequency)
+## and a bigger tactical one (a workover), using the same forecast_update
+## flag that already distinguished those cases. A critical exception can
+## additionally escalate, independent of which decision was made.
 build_surveillance_sequence <- function(has_lift, has_exception, forecast_update, critical) {
   seq_ids <- c("Data_Ingestion", "Data_Quality_Check", "Production_Allocation",
                "Variance_Analysis", "Well_Anomaly_Screening")
@@ -47,8 +61,11 @@ build_surveillance_sequence <- function(has_lift, has_exception, forecast_update
   if (has_exception) {
     seq_ids <- c(seq_ids, "Root_Cause_Diagnostics")
     if (forecast_update) seq_ids <- c(seq_ids, "Forecast_Update")
+    decision <- if (forecast_update) "Decide_Propose_Workover" else "Decide_Change_ESP_Frequency"
+  } else {
+    decision <- "Decide_No_Action"
   }
-  seq_ids <- c(seq_ids, "Surveillance_Reporting")
+  seq_ids <- c(seq_ids, decision, "Surveillance_Reporting")
   if (has_exception && critical) seq_ids <- c(seq_ids, "Issue_Escalation")
   seq_ids <- c(seq_ids, "Report_Signoff")
   seq_ids
@@ -69,11 +86,36 @@ for (has_lift in c(FALSE, TRUE)) {
 }
 surveillance_variants <- unique(surveillance_variants)
 
+surveillance_outcomes <- list(
+  list(
+    id = "no_action", label = "Decision: No Action Required", kind = "decision",
+    activity_id = "Decide_No_Action", tier = "operational"
+  ),
+  list(
+    id = "change_esp_frequency", label = "Decision: Change ESP Frequency", kind = "decision",
+    activity_id = "Decide_Change_ESP_Frequency", tier = "operational",
+    outcome_tracking = list(app = "esp_monitoring", join_key = "well_id")
+  ),
+  list(
+    id = "propose_workover", label = "Decision: Propose Workover", kind = "decision",
+    activity_id = "Decide_Propose_Workover", tier = "tactical",
+    outcome_tracking = list(app = "workover_planner", join_key = "well_id")
+  ),
+  list(
+    id = "escalate_to_engineering", label = "Decision: Escalate to Engineering", kind = "decision",
+    activity_id = "Issue_Escalation", tier = "tactical"
+  )
+)
+
 yaml::write_yaml(
   list(
     process_id = "daily_production_surveillance",
     activities = surveillance_activities,
-    variants = surveillance_variants
+    variants = surveillance_variants,
+    outcomes = surveillance_outcomes,
+    ## More than one decision can legitimately fire on the same case (a
+    ## workover proposal alongside an escalation) -- see the outcomes above.
+    outcome_exclusivity = "multi"
   ),
   file.path(out_dir, "daily_production_surveillance.yml")
 )
@@ -123,11 +165,20 @@ type_curve_variants <- list(
     "Adjust_Fitted_Curve", "Save_Draft", submit_approve)
 )
 
+type_curve_outcomes <- list(
+  list(
+    id = "publish_official", label = "Type curve published (Official)", kind = "deliverable",
+    activity_id = "Publish_Official"
+  )
+)
+
 yaml::write_yaml(
   list(
     process_id = "type_curve_construction",
     activities = type_curve_activities,
-    variants = type_curve_variants
+    variants = type_curve_variants,
+    outcomes = type_curve_outcomes,
+    outcome_exclusivity = "single"
   ),
   file.path(out_dir, "type_curve_construction.yml")
 )
