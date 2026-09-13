@@ -4,12 +4,7 @@
 \alias{run_pi_dashboard}
 \title{Launch the process intelligence dashboard}
 \usage{
-run_pi_dashboard(
-  registry_path = NULL,
-  demo = FALSE,
-  bootswatch = "flatly",
-  ...
-)
+run_pi_dashboard(registry_path = NULL, demo = FALSE, ...)
 }
 \arguments{
 \item{registry_path}{path to a registry YAML (see \code{\link[=pv_load_registry]{pv_load_registry()}}).
@@ -19,9 +14,6 @@ package.}
 \item{demo}{if \code{TRUE}, ignore \code{registry_path} and run against synthetic
 data from \code{\link[=pv_demo_registry]{pv_demo_registry()}} instead -- for trying the dashboard out
 without a real shared mount or real application data.}
-
-\item{bootswatch}{\code{"flatly"} (default) or \code{"cosmos"} -- both light,
-compact, professional bootswatch themes.}
 
 \item{...}{passed on to \code{shiny::runApp()} (e.g. \code{port}, \code{launch.browser}).}
 }

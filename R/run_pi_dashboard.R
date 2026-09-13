@@ -12,18 +12,16 @@
 #' @param demo if `TRUE`, ignore `registry_path` and run against synthetic
 #'   data from [pv_demo_registry()] instead -- for trying the dashboard out
 #'   without a real shared mount or real application data.
-#' @param bootswatch `"flatly"` (default) or `"cosmos"` -- both light,
-#'   compact, professional bootswatch themes.
 #' @param ... passed on to `shiny::runApp()` (e.g. `port`, `launch.browser`).
 #' @return does not return; runs the Shiny app.
 #' @export
-run_pi_dashboard <- function(registry_path = NULL, demo = FALSE, bootswatch = "flatly", ...) {
+run_pi_dashboard <- function(registry_path = NULL, demo = FALSE, ...) {
   registry <- if (demo) {
     pv_demo_registry()
   } else {
     pv_load_registry(registry_path %||% system.file("registry/processes.yml", package = "proviz"))
   }
 
-  app <- shiny::shinyApp(ui = app_ui(bootswatch), server = app_server(registry))
+  app <- shiny::shinyApp(ui = app_ui(), server = app_server(registry))
   shiny::runApp(app, ...)
 }

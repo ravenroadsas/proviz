@@ -1,10 +1,10 @@
 #' @noRd
-app_ui <- function(bootswatch = "flatly") {
+app_ui <- function() {
   function(request) {
     bslib::page_navbar(
       title = "Process Intelligence",
       id = "main_nav",
-      theme = pv_theme(bootswatch),
+      theme = pv_theme(),
       fillable = FALSE, # a long, many-card scrolling page, not a fixed-height single-screen layout
       bslib::nav_panel("Overview", value = "overview", mod_overview_ui("overview")),
       bslib::nav_panel("Deep dive", value = "deepdive", mod_deepdive_ui("deepdive")),

@@ -11,14 +11,6 @@ pv_format_duration <- function(mins) {
   }, character(1))
 }
 
-#' @noRd
-pv_status_label <- function(status) {
-  c(
-    not_started = "Not started", designed = "Designed",
-    instrumented = "Instrumented", deprecated = "Deprecated"
-  )[status]
-}
-
 #' Overview tab: registry-wide KPIs and the process list
 #'
 #' @param id module id.
@@ -26,28 +18,13 @@ pv_status_label <- function(status) {
 mod_overview_ui <- function(id) {
   ns <- shiny::NS(id)
   shiny::tagList(
-    bslib::layout_column_wrap(
-      width = "200px", fill = FALSE,
-      bslib::value_box(
-        title = "Coverage", value = shiny::textOutput(ns("kpi_coverage"), inline = TRUE),
-        showcase = shiny::icon("chart-pie"), theme = "primary"
-      ),
-      bslib::value_box(
-        title = "Processes registered", value = shiny::textOutput(ns("kpi_registered"), inline = TRUE),
-        showcase = shiny::icon("list-check"), theme = "secondary"
-      ),
-      bslib::value_box(
-        title = "Instrumented", value = shiny::textOutput(ns("kpi_instrumented"), inline = TRUE),
-        showcase = shiny::icon("plug"), theme = "success"
-      ),
-      bslib::value_box(
-        title = "Active cases", value = shiny::textOutput(ns("kpi_cases"), inline = TRUE),
-        showcase = shiny::icon("diagram-project"), theme = "info"
-      ),
-      bslib::value_box(
-        title = "Distinct users", value = shiny::textOutput(ns("kpi_users"), inline = TRUE),
-        showcase = shiny::icon("users"), theme = "info"
-      )
+    shiny::div(
+      class = "pv-kpi-row",
+      pv_kpi_box("Coverage", shiny::textOutput(ns("kpi_coverage"), inline = TRUE), shiny::icon("chart-pie")),
+      pv_kpi_box("Processes registered", shiny::textOutput(ns("kpi_registered"), inline = TRUE), shiny::icon("list-check")),
+      pv_kpi_box("Instrumented", shiny::textOutput(ns("kpi_instrumented"), inline = TRUE), shiny::icon("plug")),
+      pv_kpi_box("Active cases", shiny::textOutput(ns("kpi_cases"), inline = TRUE), shiny::icon("diagram-project")),
+      pv_kpi_box("Distinct users", shiny::textOutput(ns("kpi_users"), inline = TRUE), shiny::icon("users"))
     ),
     bslib::card(
       fill = FALSE,
@@ -102,7 +79,7 @@ mod_overview_server <- function(id, pv_con, registry) {
         Process = grid$process,
         Macroprocess = grid$macroprocess,
         Owner = grid$owner,
-        Status = pv_status_label(grid$status),
+        Status = vapply(grid$status, pv_status_badge, character(1)),
         Runs = grid$n_cases,
         `Median duration` = pv_format_duration(grid$median_duration_mins),
         Users = grid$n_users,
@@ -116,15 +93,9 @@ mod_overview_server <- function(id, pv_con, registry) {
     output$registry_table <- DT::renderDT({
       DT::datatable(
         display_table()[, -1], # hide process_id, kept for row-selection lookup
-        selection = "single", rownames = FALSE,
+        selection = "single", rownames = FALSE, escape = FALSE,
         options = list(dom = "tp", pageLength = 10, autoWidth = TRUE)
-      ) |>
-        DT::formatStyle("Status",
-          backgroundColor = DT::styleEqual(
-            c("Not started", "Designed", "Instrumented", "Deprecated"),
-            c("#f1f3f5", "#fff3bf", "#d3f9d8", "#f1f3f5")
-          )
-        )
+      )
     })
 
     selected_process <- shiny::eventReactive(input$open_deepdive, {

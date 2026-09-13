@@ -17,12 +17,12 @@ mod_deepdive_ui <- function(id) {
       )
     ),
     shiny::uiOutput(ns("no_data_note")),
-    bslib::layout_column_wrap(
-      width = "180px", fill = FALSE,
-      bslib::value_box(title = "Runs", value = shiny::textOutput(ns("kpi_cases"), inline = TRUE), theme = "primary"),
-      bslib::value_box(title = "Median duration", value = shiny::textOutput(ns("kpi_duration"), inline = TRUE), theme = "secondary"),
-      bslib::value_box(title = "Users", value = shiny::textOutput(ns("kpi_users"), inline = TRUE), theme = "info"),
-      bslib::value_box(title = "Conformance", value = shiny::textOutput(ns("kpi_conformance"), inline = TRUE), theme = "success")
+    shiny::div(
+      class = "pv-kpi-row",
+      pv_kpi_box("Runs", shiny::textOutput(ns("kpi_cases"), inline = TRUE), shiny::icon("diagram-project")),
+      pv_kpi_box("Median duration", shiny::textOutput(ns("kpi_duration"), inline = TRUE), shiny::icon("clock")),
+      pv_kpi_box("Users", shiny::textOutput(ns("kpi_users"), inline = TRUE), shiny::icon("users")),
+      pv_kpi_box("Conformance", shiny::textOutput(ns("kpi_conformance"), inline = TRUE), shiny::icon("check-double"))
     ),
     shiny::helpText(
       "Durations are elapsed time to the next logged action, not a measured task ",
@@ -174,12 +174,12 @@ mod_deepdive_server <- function(id, pv_con, registry, selected_process) {
       durations <- pv_case_durations(filtered_events())
       shiny::validate(shiny::need(nrow(durations) > 0, "No data."))
       med <- stats::median(durations$duration_mins)
-      plotly::plot_ly(durations, x = ~duration_mins, type = "histogram", marker = list(color = "#3182bd")) |>
+      plotly::plot_ly(durations, x = ~duration_mins, type = "histogram", marker = list(color = .pv_accent)) |>
         plotly::layout(
           xaxis = list(title = "Duration (minutes)"), yaxis = list(title = "Cases"),
           shapes = list(list(
             type = "line", x0 = med, x1 = med, y0 = 0, y1 = 1, yref = "paper",
-            line = list(color = "#e6550d", dash = "dash")
+            line = list(color = .pv_ink_secondary, dash = "dash")
           ))
         )
     })
@@ -189,7 +189,7 @@ mod_deepdive_server <- function(id, pv_con, registry, selected_process) {
       shiny::validate(shiny::need(nrow(weekly) > 0, "No data."))
       plotly::plot_ly(weekly,
         x = ~week_start, y = ~n_cases, type = "scatter", mode = "lines+markers",
-        line = list(color = "#3182bd"), marker = list(color = "#3182bd")
+        line = list(color = .pv_accent), marker = list(color = .pv_accent)
       ) |>
         plotly::layout(xaxis = list(title = "Week"), yaxis = list(title = "Cases started"))
     })
@@ -200,7 +200,7 @@ mod_deepdive_server <- function(id, pv_con, registry, selected_process) {
       breakdown <- breakdown[order(breakdown$n_cases), ]
       plotly::plot_ly(breakdown,
         x = ~n_cases, y = ~ factor(user_id, levels = user_id), type = "bar",
-        orientation = "h", color = ~role, colors = "Set2"
+        orientation = "h", color = ~role, colors = .pv_categorical
       ) |>
         plotly::layout(xaxis = list(title = "Cases involved in"), yaxis = list(title = ""))
     })
@@ -209,7 +209,7 @@ mod_deepdive_server <- function(id, pv_con, registry, selected_process) {
       shiny::req(ideal_process())
       conf <- pv_process_conformance(filtered_events(), ideal_process())
       shiny::validate(shiny::need(nrow(conf) > 0, "No data."))
-      plotly::plot_ly(conf, x = ~score, type = "histogram", marker = list(color = "#31a354")) |>
+      plotly::plot_ly(conf, x = ~score, type = "histogram", marker = list(color = .pv_accent)) |>
         plotly::layout(xaxis = list(title = "Conformance score", range = c(0, 1)), yaxis = list(title = "Cases"))
     })
 
