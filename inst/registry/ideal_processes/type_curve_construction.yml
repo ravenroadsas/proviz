@@ -1,0 +1,93 @@
+process_id: type_curve_construction
+activities:
+- id: Define_Population_Criteria
+  label: Define Type Well Population Criteria
+  role: Reservoir Engineer
+- id: Query_Analog_Wells
+  label: Query Candidate Analog Wells
+  role: Data Analyst
+- id: Review_Analog_Statistics
+  label: Review Analog Set Statistics
+  role: Reservoir Engineer
+- id: Refine_Analog_Selection
+  label: Refine Analog Well Selection
+  role: Reservoir Engineer
+- id: Normalize_Production_Data
+  label: Normalize Analog Production Data
+  role: Data Analyst
+- id: Generate_Aggregate_Curve
+  label: Generate Statistical Aggregate Curve
+  role: Reservoir Engineer
+- id: Fit_Decline_Curve
+  label: Fit Decline Curve Model
+  role: Reservoir Engineer
+- id: Adjust_Fitted_Curve
+  label: Manually Adjust Fitted Curve
+  role: Reservoir Engineer
+- id: Compare_Existing_Curves
+  label: Compare Against Existing Type Curves
+  role: Reservoir Engineer
+- id: Save_Draft
+  label: Save / Export Type Curve (Draft)
+  role: Reservoir Engineer
+- id: Postulate_For_Review
+  label: Postulate Draft for Review
+  role: Reservoir Engineer
+- id: Super_User_Review
+  label: Super User Review
+  role: Super User
+- id: Publish_Official
+  label: Publish to Type Well Library
+  role: Super User
+variants:
+- - Define_Population_Criteria
+  - Query_Analog_Wells
+  - Review_Analog_Statistics
+  - Normalize_Production_Data
+  - Generate_Aggregate_Curve
+  - Fit_Decline_Curve
+  - Compare_Existing_Curves
+  - Save_Draft
+  - Postulate_For_Review
+  - Super_User_Review
+  - Publish_Official
+- - Define_Population_Criteria
+  - Query_Analog_Wells
+  - Review_Analog_Statistics
+  - Refine_Analog_Selection
+  - Review_Analog_Statistics
+  - Normalize_Production_Data
+  - Generate_Aggregate_Curve
+  - Fit_Decline_Curve
+  - Compare_Existing_Curves
+  - Save_Draft
+  - Postulate_For_Review
+  - Super_User_Review
+  - Publish_Official
+- - Define_Population_Criteria
+  - Query_Analog_Wells
+  - Review_Analog_Statistics
+  - Normalize_Production_Data
+  - Generate_Aggregate_Curve
+  - Fit_Decline_Curve
+  - Adjust_Fitted_Curve
+  - Compare_Existing_Curves
+  - Save_Draft
+  - Postulate_For_Review
+  - Super_User_Review
+  - Publish_Official
+- - Define_Population_Criteria
+  - Query_Analog_Wells
+  - Review_Analog_Statistics
+  - Normalize_Production_Data
+  - Generate_Aggregate_Curve
+  - Fit_Decline_Curve
+  - Compare_Existing_Curves
+  - Save_Draft
+  - Postulate_For_Review
+  - Super_User_Review
+  - Adjust_Fitted_Curve
+  - Save_Draft
+  - Postulate_For_Review
+  - Super_User_Review
+  - Publish_Official

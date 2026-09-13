@@ -1,0 +1,140 @@
+process_id: daily_production_surveillance
+activities:
+- id: Data_Ingestion
+  label: Pull SCADA & Historian Data
+  role: Surveillance Analyst
+- id: Data_Quality_Check
+  label: Validate & Cleanse Meter Readings
+  role: Surveillance Analyst
+- id: Production_Allocation
+  label: Reconcile Well-to-Facility Allocation
+  role: Production Engineer
+- id: Variance_Analysis
+  label: Compare Actual vs Forecast/Nomination
+  role: Production Engineer
+- id: Well_Anomaly_Screening
+  label: Screen Wells for Anomalies
+  role: Production Engineer
+- id: Artificial_Lift_Review
+  label: Review Artificial Lift Performance
+  role: Reliability Engineer
+- id: Exception_Prioritization
+  label: Prioritize Flagged Deviations
+  role: Production Engineer
+- id: Root_Cause_Diagnostics
+  label: Diagnose Root Cause on Flagged Wells
+  role: Reliability Engineer
+- id: Forecast_Update
+  label: Update Production Forecast / Decline Curve
+  role: Production Engineer
+- id: Surveillance_Reporting
+  label: Log Findings in Daily Surveillance Report
+  role: Surveillance Analyst
+- id: Issue_Escalation
+  label: Escalate Critical Issue to Ops/Engineering
+  role: Shift Supervisor
+- id: Report_Signoff
+  label: Review & Sign Off Daily Report
+  role: Shift Supervisor
+variants:
+- - Data_Ingestion
+  - Data_Quality_Check
+  - Production_Allocation
+  - Variance_Analysis
+  - Well_Anomaly_Screening
+  - Exception_Prioritization
+  - Surveillance_Reporting
+  - Report_Signoff
+- - Data_Ingestion
+  - Data_Quality_Check
+  - Production_Allocation
+  - Variance_Analysis
+  - Well_Anomaly_Screening
+  - Exception_Prioritization
+  - Root_Cause_Diagnostics
+  - Surveillance_Reporting
+  - Report_Signoff
+- - Data_Ingestion
+  - Data_Quality_Check
+  - Production_Allocation
+  - Variance_Analysis
+  - Well_Anomaly_Screening
+  - Exception_Prioritization
+  - Root_Cause_Diagnostics
+  - Surveillance_Reporting
+  - Issue_Escalation
+  - Report_Signoff
+- - Data_Ingestion
+  - Data_Quality_Check
+  - Production_Allocation
+  - Variance_Analysis
+  - Well_Anomaly_Screening
+  - Exception_Prioritization
+  - Root_Cause_Diagnostics
+  - Forecast_Update
+  - Surveillance_Reporting
+  - Report_Signoff
+- - Data_Ingestion
+  - Data_Quality_Check
+  - Production_Allocation
+  - Variance_Analysis
+  - Well_Anomaly_Screening
+  - Exception_Prioritization
+  - Root_Cause_Diagnostics
+  - Forecast_Update
+  - Surveillance_Reporting
+  - Issue_Escalation
+  - Report_Signoff
+- - Data_Ingestion
+  - Data_Quality_Check
+  - Production_Allocation
+  - Variance_Analysis
+  - Well_Anomaly_Screening
+  - Artificial_Lift_Review
+  - Exception_Prioritization
+  - Surveillance_Reporting
+  - Report_Signoff
+- - Data_Ingestion
+  - Data_Quality_Check
+  - Production_Allocation
+  - Variance_Analysis
+  - Well_Anomaly_Screening
+  - Artificial_Lift_Review
+  - Exception_Prioritization
+  - Root_Cause_Diagnostics
+  - Surveillance_Reporting
+  - Report_Signoff
+- - Data_Ingestion
+  - Data_Quality_Check
+  - Production_Allocation
+  - Variance_Analysis
+  - Well_Anomaly_Screening
+  - Artificial_Lift_Review
+  - Exception_Prioritization
+  - Root_Cause_Diagnostics
+  - Surveillance_Reporting
+  - Issue_Escalation
+  - Report_Signoff
+- - Data_Ingestion
+  - Data_Quality_Check
+  - Production_Allocation
+  - Variance_Analysis
+  - Well_Anomaly_Screening
+  - Artificial_Lift_Review
+  - Exception_Prioritization
+  - Root_Cause_Diagnostics
+  - Forecast_Update
+  - Surveillance_Reporting
+  - Report_Signoff
+- - Data_Ingestion
+  - Data_Quality_Check
+  - Production_Allocation
+  - Variance_Analysis
+  - Well_Anomaly_Screening
+  - Artificial_Lift_Review
+  - Exception_Prioritization
+  - Root_Cause_Diagnostics
+  - Forecast_Update
+  - Surveillance_Reporting
+  - Issue_Escalation
+  - Report_Signoff

@@ -1,0 +1,40 @@
+# Process registry: the source of truth for the "coverage" KPI and the
+# overview tab's process list. One entry per target business process --
+# instrumented or not. Add a row here as soon as a process is *scoped*
+# (Step 1 of the playbook), not only once it's instrumented; that's what
+# makes coverage a meaningful fraction instead of a tautological 100%.
+#
+# status: not_started | designed | instrumented | deprecated
+#   not_started  -- identified as in-scope, nothing designed yet
+#   designed     -- ideal process modeled (activities + variants below),
+#                   no app instrumented yet
+#   instrumented -- protrace wired into at least one subprocess/app;
+#                   dashboard will compute live KPIs for these
+#   deprecated   -- retired; kept for history, excluded from coverage's
+#                   denominator
+#
+# ideal_process: path (relative to this file's directory) to the
+# activities+variants YAML pv_load_ideal_process() reads.
+#
+# subprocesses: only meaningful once status == instrumented -- one entry
+# per app/module this process spans, each naming the local DuckDB file
+# pv_connect_registry() will ATTACH.
+
+- process_id: type_curve_construction
+  macroprocess: reservoir_engineering
+  process: "Type Curve Construction"
+  owner: "Reservoir Engineering Lead"
+  status: instrumented
+  ideal_process: ideal_processes/type_curve_construction.yml
+  subprocesses:
+    - app: typecurves
+      subprocess: type_curve_module
+      duckdb_path: /mnt/shared/apps/typecurves/protrace.duckdb
+
+- process_id: daily_production_surveillance
+  macroprocess: production_operations
+  process: "Daily Production Surveillance"
+  owner: "Production Engineering Lead"
+  status: designed
+  ideal_process: ideal_processes/daily_production_surveillance.yml
+  subprocesses: []

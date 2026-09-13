@@ -15,8 +15,21 @@ Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
 RoxygenNote: 7.3.1
 Imports:
-    utils
+    bslib,
+    bupaR,
+    DBI,
+    DT,
+    duckdb,
+    edeaR,
+    lubridate,
+    plotly,
+    processmapR,
+    shiny,
+    stats,
+    utils,
+    yaml
 Suggests:
+    protrace,
     testthat (>= 3.0.0),
     withr
 Config/testthat/edition: 3
