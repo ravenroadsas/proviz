@@ -1,19 +1,35 @@
-#' Long-form heatmap data reshaped into a process x user/role matrix,
-#' zero-filled for combinations with no cases (a `0`, not a missing
-#' cell, since "this user never touched this process" is a real value,
-#' not an unknown one) -- what `plotly::plot_ly(type = "heatmap")` wants.
+#' Long-form heatmap data reshaped into a column(process-or-app) x
+#' user/role matrix, zero-filled for combinations with no cases (a `0`,
+#' not a missing cell, since "this user never touched this column" is a
+#' real value, not an unknown one) -- what `plotly::plot_ly(type =
+#' "heatmap")` wants.
+#' @param long a long-form heatmap data.frame (e.g. [pv_portfolio_heatmap()]
+#'   or [pv_app_heatmap()]'s result), with a `col` column already added
+#'   (see [pv_heatmap_columns()]) naming each x-axis category.
+#' @param dim_col the y-axis column name (`"user_id"` or `"role"`).
 #' @noRd
 pv_heatmap_matrix <- function(long, dim_col) {
-  processes <- unique(long$process)
+  cols <- unique(long$col)
   dims <- unique(long[[dim_col]])
-  if (length(processes) == 0 || length(dims) == 0) {
+  if (length(cols) == 0 || length(dims) == 0) {
     return(list(z = matrix(numeric(0), 0, 0), x = character(0), y = character(0)))
   }
-  z <- matrix(0, nrow = length(dims), ncol = length(processes), dimnames = list(dims, processes))
+  z <- matrix(0, nrow = length(dims), ncol = length(cols), dimnames = list(dims, cols))
   for (i in seq_len(nrow(long))) {
-    z[long[[dim_col]][i], long$process[i]] <- long$n_cases[i]
+    z[long[[dim_col]][i], long$col[i]] <- long$n_cases[i]
   }
-  list(z = z, x = processes, y = dims)
+  list(z = z, x = cols, y = dims)
+}
+
+#' Label each row of a heatmap data.frame with its x-axis category --
+#' the business process's own label at process granularity, or
+#' `"<process> / <app>"` at app granularity (so two different processes'
+#' identically-named apps, if that ever happens, still read as distinct
+#' columns).
+#' @noRd
+pv_heatmap_columns <- function(long, by_app) {
+  long$col <- if (by_app) paste(long$process, long$app, sep = " / ") else long$process
+  long
 }
 
 #' Users & roles tab: a heatmap of activity across the whole process
@@ -36,8 +52,12 @@ mod_heatmap_ui <- function(id) {
             shiny::radioButtons(ns("dimension"), "Dimension", c("Users" = "user", "Roles" = "role"), inline = TRUE)
           ),
           shiny::column(
-            9,
+            7,
             shiny::selectizeInput(ns("process_filter"), "Business processes", choices = NULL, multiple = TRUE, width = "100%")
+          ),
+          shiny::column(
+            2,
+            shiny::checkboxInput(ns("show_apps"), "Break down by app", value = FALSE)
           )
         )
       )
@@ -79,11 +99,15 @@ mod_heatmap_server <- function(id, pv_con, registry) {
 
     heatmap_long <- shiny::reactive({
       shiny::req(pv_con(), registry(), input$dimension)
-      long <- pv_portfolio_heatmap(pv_con(), registry(), by = input$dimension)
-      if (!is.null(input$process_filter) && length(input$process_filter) > 0) {
-        long <- long[long$process_id %in% input$process_filter, ]
+      selected <- if (!is.null(input$process_filter) && length(input$process_filter) > 0) input$process_filter else NULL
+
+      long <- if (isTRUE(input$show_apps)) {
+        pv_app_heatmap(pv_con(), registry(), by = input$dimension, process_ids = selected)
+      } else {
+        full <- pv_portfolio_heatmap(pv_con(), registry(), by = input$dimension)
+        if (is.null(selected)) full else full[full$process_id %in% selected, ]
       }
-      long
+      pv_heatmap_columns(long, by_app = isTRUE(input$show_apps))
     })
 
     output$no_data_note <- shiny::renderUI({
@@ -102,7 +126,7 @@ mod_heatmap_server <- function(id, pv_con, registry) {
         colors = scale, hovertemplate = "%{y} x %{x}: %{z} cases<extra></extra>"
       ) |>
         plotly::layout(
-          xaxis = list(title = "Business process"),
+          xaxis = list(title = if (isTRUE(input$show_apps)) "Business process / App" else "Business process"),
           yaxis = list(title = if (input$dimension == "user") "User" else "Role")
         )
     })
@@ -111,8 +135,15 @@ mod_heatmap_server <- function(id, pv_con, registry) {
       long <- heatmap_long()
       shiny::validate(shiny::need(nrow(long) > 0, "No data."))
       long <- long[order(-long$n_cases), ]
-      display <- long[, c("process", dim_col(), "n_cases")]
-      names(display) <- c("Process", if (input$dimension == "user") "User" else "Role", "Cases")
+      dim_label <- if (input$dimension == "user") "User" else "Role"
+
+      if (isTRUE(input$show_apps)) {
+        display <- long[, c("process", "app", dim_col(), "n_cases")]
+        names(display) <- c("Process", "App", dim_label, "Cases")
+      } else {
+        display <- long[, c("process", dim_col(), "n_cases")]
+        names(display) <- c("Process", dim_label, "Cases")
+      }
       DT::datatable(display, rownames = FALSE, options = list(pageLength = 10, dom = "tp"), class = "compact stripe")
     })
   })

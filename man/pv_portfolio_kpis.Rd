@@ -14,8 +14,9 @@ from.}
 }
 \value{
 a list: \code{n_processes}, \code{n_instrumented}, \code{n_steps},
-\code{n_steps_monitored}, \code{steps_pct}, \code{n_cases}, \code{n_users},
-\code{n_weekly_users}, \code{completion_pct} (see \code{\link[=pv_portfolio_completion]{pv_portfolio_completion()}}).
+\code{n_steps_monitored}, \code{steps_pct}, \code{n_apps}, \code{n_apps_monitored},
+\code{apps_pct}, \code{n_cases}, \code{n_users}, \code{n_weekly_users}, \code{completion_pct}
+(see \code{\link[=pv_portfolio_completion]{pv_portfolio_completion()}}).
 }
 \description{
 The headline numbers for the portfolio overview tab: how many processes

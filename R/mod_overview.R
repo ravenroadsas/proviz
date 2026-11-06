@@ -46,6 +46,7 @@ mod_overview_ui <- function(id) {
       pv_kpi_box("Business processes", shiny::textOutput(ns("kpi_processes"), inline = TRUE), shiny::icon("sitemap")),
       pv_kpi_box("Instrumented", shiny::textOutput(ns("kpi_instrumented"), inline = TRUE), shiny::icon("plug")),
       pv_kpi_box("Steps monitored", shiny::textOutput(ns("kpi_steps"), inline = TRUE), shiny::icon("list-check")),
+      pv_kpi_box("Apps monitored", shiny::textOutput(ns("kpi_apps"), inline = TRUE), shiny::icon("plug-circle-check")),
       pv_kpi_box("Active cases", shiny::textOutput(ns("kpi_cases"), inline = TRUE), shiny::icon("diagram-project")),
       pv_kpi_box("Distinct users", shiny::textOutput(ns("kpi_users"), inline = TRUE), shiny::icon("users")),
       pv_kpi_box("Weekly active users", shiny::textOutput(ns("kpi_weekly_users"), inline = TRUE), shiny::icon("calendar-week")),
@@ -94,6 +95,10 @@ mod_overview_server <- function(id, pv_con, registry) {
       p <- portfolio()
       sprintf("%d / %d", p$n_steps_monitored, p$n_steps)
     })
+    output$kpi_apps <- shiny::renderText({
+      p <- portfolio()
+      sprintf("%d / %d", p$n_apps_monitored, p$n_apps)
+    })
     output$kpi_cases <- shiny::renderText(as.character(portfolio()$n_cases))
     output$kpi_users <- shiny::renderText(as.character(portfolio()$n_users))
     output$kpi_weekly_users <- shiny::renderText(as.character(portfolio()$n_weekly_users))
@@ -118,7 +123,6 @@ mod_overview_server <- function(id, pv_con, registry) {
       conformance_pct <- round(100 * grid$conformance_median)
       conformance_label <- ifelse(is.na(conformance_pct), NA_character_, paste0(conformance_pct, "%"))
       completion_label <- ifelse(is.na(grid$completion_pct), NA_character_, paste0(round(grid$completion_pct), "%"))
-      steps_label <- ifelse(is.na(grid$n_steps), NA_character_, sprintf("%d / %d", grid$n_steps_monitored, grid$n_steps))
 
       data.frame(
         process_id = grid$process_id,
@@ -128,7 +132,7 @@ mod_overview_server <- function(id, pv_con, registry) {
         Owner = grid$owner,
         Status = vapply(grid$status, pv_status_badge, character(1)),
         Loop = vapply(pv_loop_label(grid$loop_length), pv_type_badge, character(1), USE.NAMES = FALSE),
-        Steps = vapply(steps_label, pv_type_badge, character(1), USE.NAMES = FALSE),
+        Steps = grid$n_steps,
         Runs = vapply(seq_len(nrow(grid)), function(i) pv_cell_bar(as.character(grid$n_cases[i]), runs_pct[i]), character(1)),
         `Median duration` = pv_format_duration(grid$median_duration_mins),
         Users = grid$n_users,

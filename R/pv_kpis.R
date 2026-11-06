@@ -239,6 +239,50 @@ pv_step_coverage <- function(registry) {
   list(by_process = by_process, portfolio = portfolio)
 }
 
+#' Apps monitored, per process and portfolio-wide
+#'
+#' The app-level counterpart to [pv_step_coverage()] -- every app counts
+#' individually here (unlike a step, which counts as monitored as soon as
+#' *any* one of its apps is), since "how many of the apps I've scoped are
+#' actually instrumented" is its own, finer-grained coverage signal.
+#'
+#' @param registry a [pv_load_registry()] result.
+#' @return a list: `by_process` (a `data.frame`: `process_id`, `n_apps`,
+#'   `n_apps_monitored`, `pct`), `portfolio` (a list: `n_apps`,
+#'   `n_apps_monitored`, `pct`, totalled across every non-`deprecated`
+#'   process).
+#' @export
+pv_app_coverage <- function(registry) {
+  subs <- registry$subprocesses
+  empty_by_process <- data.frame(
+    process_id = character(0), n_apps = integer(0), n_apps_monitored = integer(0), pct = numeric(0)
+  )
+
+  if (nrow(subs) == 0) {
+    return(list(by_process = empty_by_process, portfolio = list(n_apps = 0L, n_apps_monitored = 0L, pct = NA_real_)))
+  }
+
+  subs$monitored <- !is.na(subs$duckdb_path)
+  by_process <- do.call(rbind, lapply(split(subs, subs$process_id), function(g) {
+    data.frame(
+      process_id = g$process_id[1], n_apps = nrow(g), n_apps_monitored = sum(g$monitored),
+      stringsAsFactors = FALSE
+    )
+  }))
+  rownames(by_process) <- NULL
+  by_process$pct <- round(100 * by_process$n_apps_monitored / by_process$n_apps, 1)
+
+  active_ids <- registry$processes$process_id[registry$processes$status != "deprecated"]
+  active_subs <- subs[subs$process_id %in% active_ids, ]
+  portfolio <- list(
+    n_apps = nrow(active_subs),
+    n_apps_monitored = sum(active_subs$monitored),
+    pct = if (nrow(active_subs) == 0) NA_real_ else round(100 * sum(active_subs$monitored) / nrow(active_subs), 1)
+  )
+
+  list(by_process = by_process, portfolio = portfolio)
+}
+
 #' Distinct users active in the trailing week
 #'
 #' "Weekly active users" anchored to the most recent event in `events`
@@ -268,8 +312,9 @@ pv_weekly_active_users <- function(events) {
 #' @param registry the same [pv_load_registry()] result `pv_con` was built
 #'   from.
 #' @return a list: `n_processes`, `n_instrumented`, `n_steps`,
-#'   `n_steps_monitored`, `steps_pct`, `n_cases`, `n_users`,
-#'   `n_weekly_users`, `completion_pct` (see [pv_portfolio_completion()]).
+#'   `n_steps_monitored`, `steps_pct`, `n_apps`, `n_apps_monitored`,
+#'   `apps_pct`, `n_cases`, `n_users`, `n_weekly_users`, `completion_pct`
+#'   (see [pv_portfolio_completion()]).
 #' @export
 pv_portfolio_kpis <- function(pv_con, registry) {
   instrumented_ids <- registry$processes$process_id[registry$processes$status == "instrumented"]
@@ -280,11 +325,13 @@ pv_portfolio_kpis <- function(pv_con, registry) {
 
   coverage <- pv_coverage(registry)
   step_cov <- pv_step_coverage(registry)$portfolio
+  app_cov <- pv_app_coverage(registry)$portfolio
   completion <- pv_portfolio_completion(pv_con, registry)
 
   list(
     n_processes = coverage$total, n_instrumented = coverage$instrumented,
     n_steps = step_cov$n_steps, n_steps_monitored = step_cov$n_steps_monitored, steps_pct = step_cov$pct,
+    n_apps = app_cov$n_apps, n_apps_monitored = app_cov$n_apps_monitored, apps_pct = app_cov$pct,
     n_cases = length(unique(all_events$case_id)), n_users = length(unique(all_events$user_id)),
     n_weekly_users = pv_weekly_active_users(all_events),
     completion_pct = completion$pct
@@ -344,6 +391,73 @@ pv_portfolio_heatmap <- function(pv_con, registry, by = c("user", "role")) {
   out$process <- unname(proc_labels[out$process_id])
   rownames(out) <- NULL
   out[, c("process_id", "process", dim_col, "n_cases")]
+}
+
+#' User/role activity heatmap at app granularity, within a chosen set of
+#' business processes
+#'
+#' The "break down by app" mode behind the users-and-roles heatmap --
+#' [pv_portfolio_heatmap()]'s one-column-per-process view, one level
+#' finer: a column per monitored app instead, scoped to `process_ids` so
+#' breaking a handful of processes down into their apps doesn't also pull
+#' every other instrumented process's apps.
+#'
+#' @param pv_con a [pv_connect_registry()] result.
+#' @param registry the same [pv_load_registry()] result `pv_con` was built
+#'   from.
+#' @param by `"user"` (default) or `"role"`.
+#' @param process_ids character vector of `process_id`s to scope to, or
+#'   `NULL` (default) for every monitored app across the whole portfolio.
+#' @return a `data.frame`, long-form: `process_id`, `process` (label),
+#'   `app`, `subprocess`, `user_id` or `role` (named for `by`), `n_cases`.
+#'   Zero rows if none of the scoped apps has a `duckdb_path` or any
+#'   events yet.
+#' @export
+pv_app_heatmap <- function(pv_con, registry, by = c("user", "role"), process_ids = NULL) {
+  by <- match.arg(by)
+  dim_col <- if (by == "user") "user_id" else "role"
+  empty <- data.frame(
+    process_id = character(0), process = character(0), app = character(0),
+    subprocess = character(0), n_cases = integer(0)
+  )
+  empty[[dim_col]] <- character(0)
+  empty <- empty[, c("process_id", "process", "app", "subprocess", dim_col, "n_cases")]
+
+  subs <- registry$subprocesses[!is.na(registry$subprocesses$duckdb_path), ]
+  if (!is.null(process_ids)) {
+    subs <- subs[subs$process_id %in% process_ids, ]
+  }
+  if (nrow(subs) == 0) {
+    return(empty)
+  }
+
+  rows <- lapply(seq_len(nrow(subs)), function(i) {
+    events <- pv_pull_app_events(pv_con, registry, subs$process_id[i], subs$subprocess[i])
+    if (nrow(events) == 0) {
+      return(NULL)
+    }
+    distinct <- unique(events[, c("case_id", dim_col)])
+    tab <- table(distinct[[dim_col]])
+    if (length(tab) == 0) {
+      return(NULL)
+    }
+    out <- data.frame(
+      process_id = subs$process_id[i], app = subs$app[i], subprocess = subs$subprocess[i],
+      n_cases = as.integer(tab), stringsAsFactors = FALSE
+    )
+    out[[dim_col]] <- names(tab)
+    out
+  })
+
+  out <- do.call(rbind, c(rows, list(NULL)))
+  if (is.null(out) || nrow(out) == 0) {
+    return(empty)
+  }
+
+  proc_labels <- stats::setNames(registry$processes$process, registry$processes$process_id)
+  out$process <- unname(proc_labels[out$process_id])
+  rownames(out) <- NULL
+  out[, c("process_id", "process", "app", "subprocess", dim_col, "n_cases")]
 }
 
 #' KPI grid for every instrumented business process in the registry

@@ -50,6 +50,16 @@ test_that("pv_filter_events keeps a case whole when filtering by user", {
   expect_equal(nrow(filtered), 2) # all of case 1's rows kept
 })
 
+test_that("pv_app_coverage counts each app individually, unlike pv_step_coverage", {
+  reg <- fixture_portfolio_registry()
+  cov <- pv_app_coverage(reg)
+  by_proc <- cov$by_process[cov$by_process$process_id == "proc1", ]
+  expect_equal(by_proc$n_apps, 2)
+  expect_equal(by_proc$n_apps_monitored, 1) # only sub1 has a duckdb_path
+  expect_equal(cov$portfolio$n_apps, 2) # proc2 has no apps declared
+  expect_equal(cov$portfolio$n_apps_monitored, 1)
+})
+
 test_that("pv_step_coverage counts a step monitored if at least one of its apps has a duckdb_path", {
   reg <- fixture_portfolio_registry()
   cov <- pv_step_coverage(reg)
@@ -124,6 +134,8 @@ test_that("pv_portfolio_kpis unions events across instrumented processes without
   pk <- pv_portfolio_kpis(NULL, reg)
   expect_equal(pk$n_processes, 2)
   expect_equal(pk$n_instrumented, 1)
+  expect_equal(pk$n_apps, 2)
+  expect_equal(pk$n_apps_monitored, 1)
   expect_equal(pk$n_cases, 2)
   expect_equal(pk$n_users, 2)
   expect_equal(pk$completion_pct, 50)
@@ -145,4 +157,36 @@ test_that("pv_portfolio_heatmap returns the empty schema when no process is inst
   reg$processes$status <- "not_started"
   hm <- pv_portfolio_heatmap(NULL, reg, by = "role")
   expect_equal(nrow(hm), 0)
+})
+
+test_that("pv_app_heatmap counts distinct cases per user per monitored app, scoped to process_ids", {
+  reg <- fixture_portfolio_registry()
+  fake_events <- data.frame(
+    case_id = c("c1", "c1", "c2"), user_id = c("u1", "u1", "u2"), stringsAsFactors = FALSE
+  )
+  testthat::local_mocked_bindings(pv_pull_app_events = function(...) fake_events, .package = "proviz")
+
+  hm <- pv_app_heatmap(NULL, reg, by = "user")
+  # Only sub1 is monitored (has a duckdb_path) -- sub2 is skipped entirely.
+  expect_equal(unique(hm$subprocess), "sub1")
+  expect_equal(sum(hm$n_cases[hm$user_id == "u1"]), 1)
+
+  scoped <- pv_app_heatmap(NULL, reg, by = "user", process_ids = "proc2")
+  expect_equal(nrow(scoped), 0) # proc2 has no apps at all
+})
+
+test_that("pv_heatmap_columns labels columns by process alone, or 'process / app' when breaking down", {
+  long <- data.frame(process = c("Proc One", "Proc One"), app = c("App A", "App B"), stringsAsFactors = FALSE)
+  by_process <- pv_heatmap_columns(long, by_app = FALSE)
+  expect_equal(by_process$col, c("Proc One", "Proc One"))
+
+  by_app <- pv_heatmap_columns(long, by_app = TRUE)
+  expect_equal(by_app$col, c("Proc One / App A", "Proc One / App B"))
+})
+
+test_that("pv_heatmap_matrix zero-fills missing column/dimension combinations", {
+  long <- data.frame(col = c("P1", "P1", "P2"), user_id = c("u1", "u2", "u1"), n_cases = c(3, 1, 2), stringsAsFactors = FALSE)
+  mat <- pv_heatmap_matrix(long, "user_id")
+  expect_equal(mat$z["u1", "P1"], 3)
+  expect_equal(mat$z["u2", "P2"], 0) # u2 never touched P2 -- zero, not missing
 })
