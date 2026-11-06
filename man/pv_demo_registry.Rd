@@ -24,8 +24,11 @@ shortcut -- seeded with synthetic cases for two business processes: a
 and a separate review/publish app, cross-app case-linked, illustrating
 the step/app registry model end to end) and a single-app one (daily
 production surveillance), plus two placeholder registry rows in other
-statuses. Exists so \code{run_pi_dashboard(demo = TRUE)} (and this package's
-own screenshots/manual testing) can exercise every panel and every
-registry status without a real shared mount or real application data.
-Not a real organization's process list.
+statuses. Also writes a synthetic yearly training/satisfaction
+adoption workbook (see \code{\link[=pv_load_adoption]{pv_load_adoption()}}) covering all three real
+apps, each with a declared \code{adoption_threshold} and a couple of
+identified-but-never-logged-in users, so the Adoption tab's IGA index
+has something non-trivial to show. Exists so \code{run_pi_dashboard(demo = TRUE)} (and this package's own screenshots/manual testing) can
+exercise every panel and every registry status without a real shared
+mount or real application data. Not a real organization's process list.
 }

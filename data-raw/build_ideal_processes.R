@@ -23,26 +23,30 @@ dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
 ## all combinatorial variants are declared ideal.
 ## -----------------------------------------------------------------------
 
+## `score` is the engagement-score weight a click on this activity
+## contributes (see pv_score_events()) -- illustrative weights for the
+## demo, heavier for activities that represent real judgment/decisions
+## than routine data-handling ones.
 surveillance_activities <- list(
-  list(id = "Data_Ingestion",           label = "Pull SCADA & Historian Data",                 role = "Surveillance Analyst"),
-  list(id = "Data_Quality_Check",       label = "Validate & Cleanse Meter Readings",           role = "Surveillance Analyst"),
-  list(id = "Production_Allocation",    label = "Reconcile Well-to-Facility Allocation",       role = "Production Engineer"),
-  list(id = "Variance_Analysis",        label = "Compare Actual vs Forecast/Nomination",       role = "Production Engineer"),
-  list(id = "Well_Anomaly_Screening",   label = "Screen Wells for Anomalies",                  role = "Production Engineer"),
-  list(id = "Artificial_Lift_Review",   label = "Review Artificial Lift Performance",          role = "Reliability Engineer"),
-  list(id = "Exception_Prioritization", label = "Prioritize Flagged Deviations",               role = "Production Engineer"),
-  list(id = "Root_Cause_Diagnostics",   label = "Diagnose Root Cause on Flagged Wells",        role = "Reliability Engineer"),
-  list(id = "Forecast_Update",          label = "Update Production Forecast / Decline Curve",  role = "Production Engineer"),
+  list(id = "Data_Ingestion",           label = "Pull SCADA & Historian Data",                 role = "Surveillance Analyst", score = 1),
+  list(id = "Data_Quality_Check",       label = "Validate & Cleanse Meter Readings",           role = "Surveillance Analyst", score = 2),
+  list(id = "Production_Allocation",    label = "Reconcile Well-to-Facility Allocation",       role = "Production Engineer", score = 2),
+  list(id = "Variance_Analysis",        label = "Compare Actual vs Forecast/Nomination",       role = "Production Engineer", score = 2),
+  list(id = "Well_Anomaly_Screening",   label = "Screen Wells for Anomalies",                  role = "Production Engineer", score = 3),
+  list(id = "Artificial_Lift_Review",   label = "Review Artificial Lift Performance",          role = "Reliability Engineer", score = 3),
+  list(id = "Exception_Prioritization", label = "Prioritize Flagged Deviations",               role = "Production Engineer", score = 3),
+  list(id = "Root_Cause_Diagnostics",   label = "Diagnose Root Cause on Flagged Wells",        role = "Reliability Engineer", score = 4),
+  list(id = "Forecast_Update",          label = "Update Production Forecast / Decline Curve",  role = "Production Engineer", score = 3),
   ## Decision activities -- this short-loop process ends in one of several
   ## named, material decisions (never a data deliverable), and more than one
   ## can fire on the same case (a workover proposal can co-occur with an
   ## escalation) -- see the `outcomes` block below.
-  list(id = "Decide_No_Action",             label = "Decision: No Action Required",     role = "Production Engineer"),
-  list(id = "Decide_Change_ESP_Frequency",  label = "Decision: Change ESP Frequency",   role = "Production Engineer"),
-  list(id = "Decide_Propose_Workover",      label = "Decision: Propose Workover",       role = "Production Engineer"),
-  list(id = "Surveillance_Reporting",   label = "Log Findings in Daily Surveillance Report",   role = "Surveillance Analyst"),
-  list(id = "Issue_Escalation",         label = "Escalate Critical Issue to Ops/Engineering",  role = "Shift Supervisor"),
-  list(id = "Report_Signoff",           label = "Review & Sign Off Daily Report",              role = "Shift Supervisor")
+  list(id = "Decide_No_Action",             label = "Decision: No Action Required",     role = "Production Engineer", score = 5),
+  list(id = "Decide_Change_ESP_Frequency",  label = "Decision: Change ESP Frequency",   role = "Production Engineer", score = 6),
+  list(id = "Decide_Propose_Workover",      label = "Decision: Propose Workover",       role = "Production Engineer", score = 8),
+  list(id = "Surveillance_Reporting",   label = "Log Findings in Daily Surveillance Report",   role = "Surveillance Analyst", score = 2),
+  list(id = "Issue_Escalation",         label = "Escalate Critical Issue to Ops/Engineering",  role = "Shift Supervisor", score = 6),
+  list(id = "Report_Signoff",           label = "Review & Sign Off Daily Report",              role = "Shift Supervisor", score = 3)
 )
 
 ## Mirrors build_case_sequence() in tests/R/01_ideal_process.R, with one
@@ -138,16 +142,16 @@ yaml::write_yaml(
 ## -----------------------------------------------------------------------
 
 type_curve_draft_activities <- list(
-  list(id = "Define_Population_Criteria", label = "Define Type Well Population Criteria", role = "Reservoir Engineer"),
-  list(id = "Query_Analog_Wells",         label = "Query Candidate Analog Wells",          role = "Data Analyst"),
-  list(id = "Review_Analog_Statistics",   label = "Review Analog Set Statistics",          role = "Reservoir Engineer"),
-  list(id = "Refine_Analog_Selection",    label = "Refine Analog Well Selection",          role = "Reservoir Engineer"),
-  list(id = "Normalize_Production_Data",  label = "Normalize Analog Production Data",      role = "Data Analyst"),
-  list(id = "Generate_Aggregate_Curve",   label = "Generate Statistical Aggregate Curve",  role = "Reservoir Engineer"),
-  list(id = "Fit_Decline_Curve",          label = "Fit Decline Curve Model",               role = "Reservoir Engineer"),
-  list(id = "Adjust_Fitted_Curve",        label = "Manually Adjust Fitted Curve",          role = "Reservoir Engineer"),
-  list(id = "Compare_Existing_Curves",    label = "Compare Against Existing Type Curves",  role = "Reservoir Engineer"),
-  list(id = "Save_Draft",                 label = "Save / Export Type Curve (Draft)",      role = "Reservoir Engineer")
+  list(id = "Define_Population_Criteria", label = "Define Type Well Population Criteria", role = "Reservoir Engineer", score = 2),
+  list(id = "Query_Analog_Wells",         label = "Query Candidate Analog Wells",          role = "Data Analyst", score = 1),
+  list(id = "Review_Analog_Statistics",   label = "Review Analog Set Statistics",          role = "Reservoir Engineer", score = 2),
+  list(id = "Refine_Analog_Selection",    label = "Refine Analog Well Selection",          role = "Reservoir Engineer", score = 3),
+  list(id = "Normalize_Production_Data",  label = "Normalize Analog Production Data",      role = "Data Analyst", score = 1),
+  list(id = "Generate_Aggregate_Curve",   label = "Generate Statistical Aggregate Curve",  role = "Reservoir Engineer", score = 3),
+  list(id = "Fit_Decline_Curve",          label = "Fit Decline Curve Model",               role = "Reservoir Engineer", score = 4),
+  list(id = "Adjust_Fitted_Curve",        label = "Manually Adjust Fitted Curve",          role = "Reservoir Engineer", score = 3),
+  list(id = "Compare_Existing_Curves",    label = "Compare Against Existing Type Curves",  role = "Reservoir Engineer", score = 2),
+  list(id = "Save_Draft",                 label = "Save / Export Type Curve (Draft)",      role = "Reservoir Engineer", score = 5)
 )
 
 base_front <- c("Define_Population_Criteria", "Query_Analog_Wells", "Review_Analog_Statistics")
@@ -183,10 +187,10 @@ yaml::write_yaml(
 )
 
 type_curve_review_activities <- list(
-  list(id = "Postulate_For_Review", label = "Postulate Draft for Review",            role = "Reservoir Engineer"),
-  list(id = "Super_User_Review",    label = "Super User Review",                     role = "Super User"),
-  list(id = "Reject_Draft",         label = "Reject Draft (Send Back for Rework)",   role = "Super User"),
-  list(id = "Publish_Official",     label = "Publish to Type Well Library",          role = "Super User")
+  list(id = "Postulate_For_Review", label = "Postulate Draft for Review",            role = "Reservoir Engineer", score = 2),
+  list(id = "Super_User_Review",    label = "Super User Review",                     role = "Super User", score = 4),
+  list(id = "Reject_Draft",         label = "Reject Draft (Send Back for Rework)",   role = "Super User", score = 3),
+  list(id = "Publish_Official",     label = "Publish to Type Well Library",          role = "Super User", score = 8)
 )
 
 type_curve_review_variants <- list(

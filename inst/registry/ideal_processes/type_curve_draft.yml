@@ -3,33 +3,43 @@ activities:
 - id: Define_Population_Criteria
   label: Define Type Well Population Criteria
   role: Reservoir Engineer
+  score: 2.0
 - id: Query_Analog_Wells
   label: Query Candidate Analog Wells
   role: Data Analyst
+  score: 1.0
 - id: Review_Analog_Statistics
   label: Review Analog Set Statistics
   role: Reservoir Engineer
+  score: 2.0
 - id: Refine_Analog_Selection
   label: Refine Analog Well Selection
   role: Reservoir Engineer
+  score: 3.0
 - id: Normalize_Production_Data
   label: Normalize Analog Production Data
   role: Data Analyst
+  score: 1.0
 - id: Generate_Aggregate_Curve
   label: Generate Statistical Aggregate Curve
   role: Reservoir Engineer
+  score: 3.0
 - id: Fit_Decline_Curve
   label: Fit Decline Curve Model
   role: Reservoir Engineer
+  score: 4.0
 - id: Adjust_Fitted_Curve
   label: Manually Adjust Fitted Curve
   role: Reservoir Engineer
+  score: 3.0
 - id: Compare_Existing_Curves
   label: Compare Against Existing Type Curves
   role: Reservoir Engineer
+  score: 2.0
 - id: Save_Draft
   label: Save / Export Type Curve (Draft)
   role: Reservoir Engineer
+  score: 5.0
 variants:
 - - Define_Population_Criteria
   - Query_Analog_Wells

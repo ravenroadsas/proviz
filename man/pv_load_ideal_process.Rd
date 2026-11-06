@@ -13,8 +13,12 @@ pv_load_ideal_process(path)
 }
 \value{
 a \code{pv_ideal_process} object (a list): \verb{$process_id},
-\verb{$activities} (a \code{data.frame}: \code{id}, \code{label}, \code{role}), \verb{$variants} (a
-list of character vectors -- each an acceptable activity-id sequence,
+\verb{$activities} (a \code{data.frame}: \code{id}, \code{label}, \code{role}, \code{score} -- the
+engagement-score weight assigned to this activity, e.g. per click;
+\code{0} if not declared, so an app that hasn't adopted scoring yet just
+contributes nothing to \code{\link[=pv_score_events]{pv_score_events()}} rather than erroring),
+\verb{$variants} (a list of character vectors -- each an acceptable
+activity-id sequence,
 used by \code{\link[=pv_case_conformance]{pv_case_conformance()}} as the reference set to score against),
 \verb{$outcomes} (a \code{data.frame}, one row per named way this process can
 end -- see \code{\link[=pv_case_outcome]{pv_case_outcome()}}: \code{id}, \code{label}, \code{kind} (\code{"deliverable"}

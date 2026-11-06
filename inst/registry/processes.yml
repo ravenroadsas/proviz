@@ -40,6 +40,17 @@
 # earlier step (see pv_step_sequence()). Omit it and the process's
 # business-level "ideal flow" is just its steps in step_order, a single
 # straight-through sequence.
+#
+# adoption_source: optional, path (relative to this file's directory) to
+# the yearly training/satisfaction workbook pv_load_adoption() reads --
+# one sheet per app (see that function's docs for the expected columns).
+# Only needs declaring on one process entry; it describes the whole
+# portfolio.
+#
+# adoption_threshold: optional, per app -- the weekly engagement score
+# (see each app's own ideal_process activities' `score` field) an
+# identified user must average to count as "actively using" that app,
+# for the IGA adoption index's usage component (see pv_app_iga()).
 
 - process_id: type_curve_construction
   macroprocess: reservoir_engineering
@@ -47,6 +58,7 @@
   owner: "Reservoir Engineering Lead"
   status: instrumented
   loop_length: medium
+  adoption_source: adoption.xlsx
   step_variants:
     - [draft, review] # straight-through: approved on the first pass
     - [draft, review, draft, review] # one rework loop: rejected, redrafted, re-reviewed
@@ -58,6 +70,7 @@
       step_order: 1
       ideal_process: ideal_processes/type_curve_draft.yml
       duckdb_path: /mnt/shared/apps/typecurves/protrace.duckdb
+      adoption_threshold: 10
     - app: typecurve_review
       subprocess: type_curve_review_module
       step: review
@@ -65,6 +78,7 @@
       step_order: 2
       ideal_process: ideal_processes/type_curve_review.yml
       duckdb_path: /mnt/shared/apps/typecurve_review/protrace.duckdb
+      adoption_threshold: 8
 
 - process_id: daily_production_surveillance
   macroprocess: production_operations
@@ -79,3 +93,4 @@
       step_label: "Surveillance"
       step_order: 1
       ideal_process: ideal_processes/daily_production_surveillance.yml
+      adoption_threshold: 6

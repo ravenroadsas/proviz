@@ -26,7 +26,10 @@ short-loop, reserves estimation is long-loop.}
 more apps into the same ordered step), \code{step_label}, \code{step_order}
 (position of the step within the process), \code{app_order} (position
 of this app within its step), \code{duckdb_path} (\code{NA} until the app is
-instrumented). Zero rows for a process with no app scoped yet.}
+instrumented), \code{adoption_threshold} (\code{NA} unless declared -- the
+weekly score, in points, an identified user must average to count
+as "actively using" this app for \code{\link[=pv_app_iga]{pv_app_iga()}}'s usage
+component). Zero rows for a process with no app scoped yet.}
 \item{\verb{$steps}}{one row per distinct (process, step), derived from
 \verb{$subprocesses}: \code{process_id}, \code{step}, \code{step_label}, \code{step_order}
 -- ordered within each process. A convenience view; not separately
@@ -43,6 +46,11 @@ declare \code{step_variants}, or declared it as an empty list
 not as "zero acceptable paths" -- the latter would silently make
 conformance unscorable), in which case \code{\link[=pv_step_sequence]{pv_step_sequence()}} falls
 back to the single \code{step_order}-derived sequence.}
+\item{\verb{$adoption_source}}{path to the yearly training/satisfaction
+Excel workbook (see \code{\link[=pv_load_adoption]{pv_load_adoption()}}), resolved relative to
+the registry file's own directory -- \code{NULL} if no entry declares
+an \code{adoption_source} field. Only needs declaring once (on any one
+process entry); it describes the whole portfolio, not one process.}
 }
 }
 \description{

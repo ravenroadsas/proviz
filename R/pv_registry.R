@@ -39,7 +39,10 @@
 #'       more apps into the same ordered step), `step_label`, `step_order`
 #'       (position of the step within the process), `app_order` (position
 #'       of this app within its step), `duckdb_path` (`NA` until the app is
-#'       instrumented). Zero rows for a process with no app scoped yet.}
+#'       instrumented), `adoption_threshold` (`NA` unless declared -- the
+#'       weekly score, in points, an identified user must average to count
+#'       as "actively using" this app for [pv_app_iga()]'s usage
+#'       component). Zero rows for a process with no app scoped yet.}
 #'     \item{`$steps`}{one row per distinct (process, step), derived from
 #'       `$subprocesses`: `process_id`, `step`, `step_label`, `step_order`
 #'       -- ordered within each process. A convenience view; not separately
@@ -56,6 +59,11 @@
 #'       not as "zero acceptable paths" -- the latter would silently make
 #'       conformance unscorable), in which case [pv_step_sequence()] falls
 #'       back to the single `step_order`-derived sequence.}
+#'     \item{`$adoption_source`}{path to the yearly training/satisfaction
+#'       Excel workbook (see [pv_load_adoption()]), resolved relative to
+#'       the registry file's own directory -- `NULL` if no entry declares
+#'       an `adoption_source` field. Only needs declaring once (on any one
+#'       process entry); it describes the whole portfolio, not one process.}
 #'   }
 #' @export
 pv_load_registry <- function(path = system.file("registry/processes.yml", package = "proviz")) {
@@ -74,6 +82,7 @@ pv_load_registry <- function(path = system.file("registry/processes.yml", packag
   subprocesses <- list()
   ideal <- list()
   step_variants <- list()
+  adoption_source <- NULL
 
   for (entry in entries) {
     missing <- setdiff(required_fields, names(entry))
@@ -100,6 +109,12 @@ pv_load_registry <- function(path = system.file("registry/processes.yml", packag
         "which is no longer used -- each app now declares its own 'ideal_process' on its subprocess entry. Ignoring it.",
         call. = FALSE
       )
+    }
+    # adoption_source (the yearly training/satisfaction Excel path) describes
+    # the whole portfolio, not any one process -- it only needs declaring on
+    # one entry, but is harmless to repeat; the first non-NULL one found wins.
+    if (is.null(adoption_source) && !is.null(entry$adoption_source)) {
+      adoption_source <- file.path(base_dir, entry$adoption_source)
     }
 
     processes[[length(processes) + 1]] <- data.frame(
@@ -141,6 +156,7 @@ pv_load_registry <- function(path = system.file("registry/processes.yml", packag
         step = s$step, step_label = s$step_label %||% pv_prettify_label(s$step),
         step_order = as.integer(s$step_order), app_order = as.integer(s$app_order %||% step_counters[[s$step]]),
         duckdb_path = s$duckdb_path %||% NA_character_,
+        adoption_threshold = as.numeric(s$adoption_threshold %||% NA_real_),
         stringsAsFactors = FALSE
       )
 
@@ -196,7 +212,7 @@ pv_load_registry <- function(path = system.file("registry/processes.yml", packag
     data.frame(
       process_id = character(0), app = character(0), subprocess = character(0),
       step = character(0), step_label = character(0), step_order = integer(0), app_order = integer(0),
-      duckdb_path = character(0), stringsAsFactors = FALSE
+      duckdb_path = character(0), adoption_threshold = numeric(0), stringsAsFactors = FALSE
     )
   }
   rownames(subprocesses) <- NULL
@@ -204,7 +220,7 @@ pv_load_registry <- function(path = system.file("registry/processes.yml", packag
   structure(
     list(
       processes = processes, subprocesses = subprocesses, steps = pv_derive_steps(subprocesses),
-      ideal = ideal, step_variants = step_variants
+      ideal = ideal, step_variants = step_variants, adoption_source = adoption_source
     ),
     class = "pv_registry"
   )
@@ -254,8 +270,12 @@ pv_derive_steps <- function(subprocesses) {
 #'   -- see `inst/registry/ideal_processes/*.yml` for real examples, and
 #'   `data-raw/build_ideal_processes.R` for how they were derived).
 #' @return a `pv_ideal_process` object (a list): `$process_id`,
-#'   `$activities` (a `data.frame`: `id`, `label`, `role`), `$variants` (a
-#'   list of character vectors -- each an acceptable activity-id sequence,
+#'   `$activities` (a `data.frame`: `id`, `label`, `role`, `score` -- the
+#'   engagement-score weight assigned to this activity, e.g. per click;
+#'   `0` if not declared, so an app that hasn't adopted scoring yet just
+#'   contributes nothing to [pv_score_events()] rather than erroring),
+#'   `$variants` (a list of character vectors -- each an acceptable
+#'   activity-id sequence,
 #'   used by [pv_case_conformance()] as the reference set to score against),
 #'   `$outcomes` (a `data.frame`, one row per named way this process can
 #'   end -- see [pv_case_outcome()]: `id`, `label`, `kind` (`"deliverable"`
@@ -290,7 +310,10 @@ pv_load_ideal_process <- function(path) {
       stop("proviz: an activity in '", spec$process_id, "' is missing field(s): ",
         paste(a_missing, collapse = ", "), call. = FALSE)
     }
-    data.frame(id = a$id, label = a$label, role = a$role, stringsAsFactors = FALSE)
+    data.frame(
+      id = a$id, label = a$label, role = a$role, score = as.numeric(a$score %||% 0),
+      stringsAsFactors = FALSE
+    )
   }))
   rownames(activities) <- NULL
 

@@ -7,10 +7,14 @@
 #' and a separate review/publish app, cross-app case-linked, illustrating
 #' the step/app registry model end to end) and a single-app one (daily
 #' production surveillance), plus two placeholder registry rows in other
-#' statuses. Exists so `run_pi_dashboard(demo = TRUE)` (and this package's
-#' own screenshots/manual testing) can exercise every panel and every
-#' registry status without a real shared mount or real application data.
-#' Not a real organization's process list.
+#' statuses. Also writes a synthetic yearly training/satisfaction
+#' adoption workbook (see [pv_load_adoption()]) covering all three real
+#' apps, each with a declared `adoption_threshold` and a couple of
+#' identified-but-never-logged-in users, so the Adoption tab's IGA index
+#' has something non-trivial to show. Exists so `run_pi_dashboard(demo =
+#' TRUE)` (and this package's own screenshots/manual testing) can
+#' exercise every panel and every registry status without a real shared
+#' mount or real application data. Not a real organization's process list.
 #'
 #' @param dir directory to write the synthetic DuckDB files into. Defaults
 #'   to a fresh temp directory.
@@ -82,6 +86,7 @@ pv_demo_registry <- function(dir = tempfile("proviz_demo_"), seed = 42) {
     step_order = c(1L, 2L, 1L),
     app_order = c(1L, 1L, 1L),
     duckdb_path = c(draft_path, review_path, ds_path),
+    adoption_threshold = c(10, 8, 6),
     stringsAsFactors = FALSE
   )
   ideal <- list(
@@ -96,13 +101,54 @@ pv_demo_registry <- function(dir = tempfile("proviz_demo_"), seed = 42) {
     )
   )
 
+  adoption_source <- pv_demo_seed_adoption_workbook(
+    dir = dir,
+    draft_users = c("l.fontaine", "m.adeyemi", "n.petrov", "o.haddad"), draft_untrained = "o.haddad",
+    review_users = c("q.alvarez", "r.kim"), review_untrained = character(0),
+    surveillance_users = c("a.reyes", "b.chen", "c.novak", "d.singh", "h.muller"), surveillance_untrained = "d.singh",
+    # Identified but never logged-in users -- real organizations always have
+    # a few, and they're what keeps the usage component below 100%.
+    extra_untrained_inactive = list(typecurves = "p.silva", typecurve_review = "s.khan", surveillance = "e.ortiz"),
+    satisfaction = c(typecurves = 88, typecurve_review = 92, surveillance = 71)
+  )
+
   structure(
     list(
       processes = processes, subprocesses = subprocesses, steps = pv_derive_steps(subprocesses),
-      ideal = ideal, step_variants = step_variants
+      ideal = ideal, step_variants = step_variants, adoption_source = adoption_source
     ),
     class = "pv_registry"
   )
+}
+
+#' Write a synthetic yearly training/satisfaction adoption workbook, one
+#' sheet per demo app (see [pv_load_adoption()])
+#' @noRd
+pv_demo_seed_adoption_workbook <- function(dir, draft_users, draft_untrained, review_users, review_untrained,
+                                            surveillance_users, surveillance_untrained,
+                                            extra_untrained_inactive, satisfaction) {
+  if (!requireNamespace("openxlsx", quietly = TRUE)) {
+    stop("proviz: pv_demo_registry() needs the 'openxlsx' package (Suggests) to write the synthetic adoption workbook.", call. = FALSE)
+  }
+
+  sheet_for <- function(users, untrained, extra_inactive_user) {
+    all_users <- c(users, extra_inactive_user)
+    data.frame(
+      user_id = all_users, trained = !all_users %in% c(untrained, extra_inactive_user),
+      stringsAsFactors = FALSE
+    )
+  }
+
+  path <- file.path(dir, "adoption.xlsx")
+  openxlsx::write.xlsx(
+    list(
+      typecurves = cbind(sheet_for(draft_users, draft_untrained, extra_untrained_inactive$typecurves), satisfaction = satisfaction[["typecurves"]]),
+      typecurve_review = cbind(sheet_for(review_users, review_untrained, extra_untrained_inactive$typecurve_review), satisfaction = satisfaction[["typecurve_review"]]),
+      surveillance = cbind(sheet_for(surveillance_users, surveillance_untrained, extra_untrained_inactive$surveillance), satisfaction = satisfaction[["surveillance"]])
+    ),
+    file = path
+  )
+  path
 }
 
 #' Generate one noisy variant of an ideal-process trace

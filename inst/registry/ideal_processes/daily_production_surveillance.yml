@@ -3,48 +3,63 @@ activities:
 - id: Data_Ingestion
   label: Pull SCADA & Historian Data
   role: Surveillance Analyst
+  score: 1.0
 - id: Data_Quality_Check
   label: Validate & Cleanse Meter Readings
   role: Surveillance Analyst
+  score: 2.0
 - id: Production_Allocation
   label: Reconcile Well-to-Facility Allocation
   role: Production Engineer
+  score: 2.0
 - id: Variance_Analysis
   label: Compare Actual vs Forecast/Nomination
   role: Production Engineer
+  score: 2.0
 - id: Well_Anomaly_Screening
   label: Screen Wells for Anomalies
   role: Production Engineer
+  score: 3.0
 - id: Artificial_Lift_Review
   label: Review Artificial Lift Performance
   role: Reliability Engineer
+  score: 3.0
 - id: Exception_Prioritization
   label: Prioritize Flagged Deviations
   role: Production Engineer
+  score: 3.0
 - id: Root_Cause_Diagnostics
   label: Diagnose Root Cause on Flagged Wells
   role: Reliability Engineer
+  score: 4.0
 - id: Forecast_Update
   label: Update Production Forecast / Decline Curve
   role: Production Engineer
+  score: 3.0
 - id: Decide_No_Action
   label: 'Decision: No Action Required'
   role: Production Engineer
+  score: 5.0
 - id: Decide_Change_ESP_Frequency
   label: 'Decision: Change ESP Frequency'
   role: Production Engineer
+  score: 6.0
 - id: Decide_Propose_Workover
   label: 'Decision: Propose Workover'
   role: Production Engineer
+  score: 8.0
 - id: Surveillance_Reporting
   label: Log Findings in Daily Surveillance Report
   role: Surveillance Analyst
+  score: 2.0
 - id: Issue_Escalation
   label: Escalate Critical Issue to Ops/Engineering
   role: Shift Supervisor
+  score: 6.0
 - id: Report_Signoff
   label: Review & Sign Off Daily Report
   role: Shift Supervisor
+  score: 3.0
 variants:
 - - Data_Ingestion
   - Data_Quality_Check

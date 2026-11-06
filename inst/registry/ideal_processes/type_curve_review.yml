@@ -3,15 +3,19 @@ activities:
 - id: Postulate_For_Review
   label: Postulate Draft for Review
   role: Reservoir Engineer
+  score: 2.0
 - id: Super_User_Review
   label: Super User Review
   role: Super User
+  score: 4.0
 - id: Reject_Draft
   label: Reject Draft (Send Back for Rework)
   role: Super User
+  score: 3.0
 - id: Publish_Official
   label: Publish to Type Well Library
   role: Super User
+  score: 8.0
 variants:
 - - Postulate_For_Review
   - Super_User_Review

@@ -10,6 +10,7 @@ app_ui <- function() {
       bslib::nav_panel("Business process", value = "business_detail", mod_business_detail_ui("business_detail")),
       bslib::nav_panel("App detail", value = "app_detail", mod_app_detail_ui("app_detail")),
       bslib::nav_panel("Users & roles", value = "heatmap", mod_heatmap_ui("heatmap")),
+      bslib::nav_panel("Adoption", value = "adoption", mod_adoption_ui("adoption")),
       bslib::nav_spacer(),
       bslib::nav_item(shiny::span(shiny::textOutput("data_as_of", inline = TRUE), class = "navbar-text me-2 small")),
       bslib::nav_item(shiny::actionButton("refresh_data", "Refresh data",

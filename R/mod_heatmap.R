@@ -72,6 +72,29 @@ mod_heatmap_ui <- function(id) {
       fill = FALSE,
       bslib::card_header("Detail"),
       DT::DTOutput(ns("heatmap_table"), fill = FALSE)
+    ),
+    bslib::card(
+      fill = FALSE,
+      bslib::card_header("Engagement score correlations"),
+      shiny::helpText(
+        style = "padding: 0 0.95rem;",
+        "Score vs. time: is this user's (or this app's) weekly engagement trending up or down? ",
+        "Score vs. compliance: do a user's higher-scoring cases also tend to follow the ideal process more closely?"
+      ),
+      shiny::div(
+        style = "padding: 0 0.95rem 0.5rem;",
+        shiny::selectInput(ns("corr_app_picker"), "App", choices = NULL, width = "300px")
+      ),
+      shiny::div(
+        class = "pv-kpi-row", style = "padding: 0 0.95rem;",
+        pv_kpi_box("Score vs. time (app-wide)", shiny::textOutput(ns("kpi_time_r"), inline = TRUE), shiny::icon("arrow-trend-up")),
+        pv_kpi_box("Score vs. compliance (app-wide)", shiny::textOutput(ns("kpi_compliance_r"), inline = TRUE), shiny::icon("link"))
+      ),
+      bslib::layout_column_wrap(
+        width = 1 / 2, fill = FALSE,
+        bslib::card(fill = FALSE, bslib::card_header("Score vs. time, by user"), DT::DTOutput(ns("time_corr_table"), fill = FALSE)),
+        bslib::card(fill = FALSE, bslib::card_header("Score vs. compliance, by user"), DT::DTOutput(ns("compliance_corr_table"), fill = FALSE))
+      )
     )
   )
 }
@@ -96,6 +119,52 @@ mod_heatmap_server <- function(id, pv_con, registry) {
     })
 
     dim_col <- shiny::reactive(if (input$dimension == "user") "user_id" else "role")
+
+    app_choices <- shiny::reactive({
+      shiny::req(registry())
+      unique(registry()$subprocesses$app[!is.na(registry()$subprocesses$duckdb_path)])
+    })
+
+    shiny::observe({
+      choices <- app_choices()
+      shiny::req(length(choices) > 0)
+      current <- if (!is.null(input$corr_app_picker) && input$corr_app_picker %in% choices) input$corr_app_picker else choices[1]
+      shiny::updateSelectInput(session, "corr_app_picker", choices = choices, selected = current)
+    })
+
+    app_scored_events <- shiny::reactive({
+      shiny::req(pv_con(), registry(), input$corr_app_picker)
+      pv_app_scored_events(pv_con(), registry(), input$corr_app_picker)
+    })
+
+    output$kpi_time_r <- shiny::renderText({
+      shiny::req(input$corr_app_picker)
+      r <- pv_score_time_trend(app_scored_events(), by = "app")$r
+      if (is.na(r)) "--" else sprintf("%.2f", r)
+    })
+    output$kpi_compliance_r <- shiny::renderText({
+      shiny::req(pv_con(), registry(), input$corr_app_picker)
+      r <- pv_app_score_compliance_correlation(pv_con(), registry(), input$corr_app_picker, by = "app")$r
+      if (is.na(r)) "--" else sprintf("%.2f", r)
+    })
+
+    output$time_corr_table <- DT::renderDT({
+      shiny::req(input$corr_app_picker)
+      tab <- pv_score_time_trend(app_scored_events(), by = "user")
+      shiny::validate(shiny::need(nrow(tab) > 0, "No events logged yet for this app."))
+      display <- tab
+      names(display) <- c("User", "r", "Weeks active")
+      DT::datatable(display, rownames = FALSE, options = list(pageLength = 8, dom = "tp"), class = "compact stripe")
+    })
+
+    output$compliance_corr_table <- DT::renderDT({
+      shiny::req(pv_con(), registry(), input$corr_app_picker)
+      tab <- pv_app_score_compliance_correlation(pv_con(), registry(), input$corr_app_picker, by = "user")
+      shiny::validate(shiny::need(nrow(tab) > 0, "No events logged yet for this app."))
+      display <- tab
+      names(display) <- c("User", "r", "Cases")
+      DT::datatable(display, rownames = FALSE, options = list(pageLength = 8, dom = "tp"), class = "compact stripe")
+    })
 
     heatmap_long <- shiny::reactive({
       shiny::req(pv_con(), registry(), input$dimension)
