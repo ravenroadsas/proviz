@@ -55,6 +55,33 @@ test_that("pv_load_registry leaves step_variants absent for a process that doesn
   expect_null(reg$step_variants[["proc1"]])
 })
 
+test_that("pv_load_registry treats an explicit empty step_variants: [] the same as omitting it", {
+  # Regression test: an empty list must NOT be stored as "zero declared
+  # variants" -- pv_step_sequence() would then return list(variants =
+  # list()) instead of falling back to the step_order-derived sequence,
+  # silently making every case's conformance unscorable (NA).
+  path <- write_registry_fixture('
+- process_id: proc1
+  macroprocess: mp1
+  process: "Proc One"
+  owner: "owner"
+  status: instrumented
+  loop_length: short
+  step_variants: []
+  subprocesses:
+    - app: app1
+      subprocess: sub1
+      step: draft
+      step_order: 1
+      duckdb_path: /tmp/x1.duckdb
+')
+  reg <- pv_load_registry(path)
+  expect_null(reg$step_variants[["proc1"]])
+
+  seq <- pv_step_sequence(reg, "proc1")
+  expect_equal(seq$variants, list("Draft")) # fell back to the step_order-derived sequence
+})
+
 test_that("pv_load_registry errors clearly when step_variants references an unknown step", {
   path <- write_registry_fixture('
 - process_id: proc1

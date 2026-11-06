@@ -38,7 +38,10 @@ authored.}
 \item{\verb{$step_variants}}{a named list, keyed by \code{process_id}, of
 declared acceptable step-label sequences (each a character
 vector) -- absent (\code{NULL} via \code{[[}) for a process that didn't
-declare \code{step_variants}, in which case \code{\link[=pv_step_sequence]{pv_step_sequence()}} falls
+declare \code{step_variants}, or declared it as an empty list
+(\verb{step_variants: []} is treated the same as omitting the field,
+not as "zero acceptable paths" -- the latter would silently make
+conformance unscorable), in which case \code{\link[=pv_step_sequence]{pv_step_sequence()}} falls
 back to the single \code{step_order}-derived sequence.}
 }
 }

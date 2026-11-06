@@ -51,7 +51,10 @@
 #'     \item{`$step_variants`}{a named list, keyed by `process_id`, of
 #'       declared acceptable step-label sequences (each a character
 #'       vector) -- absent (`NULL` via `[[`) for a process that didn't
-#'       declare `step_variants`, in which case [pv_step_sequence()] falls
+#'       declare `step_variants`, or declared it as an empty list
+#'       (`step_variants: []` is treated the same as omitting the field,
+#'       not as "zero acceptable paths" -- the latter would silently make
+#'       conformance unscorable), in which case [pv_step_sequence()] falls
 #'       back to the single `step_order`-derived sequence.}
 #'   }
 #' @export
@@ -157,7 +160,11 @@ pv_load_registry <- function(path = system.file("registry/processes.yml", packag
       }
     }
 
-    if (!is.null(entry$step_variants)) {
+    # An empty `step_variants: []` is treated the same as omitting the
+    # field entirely (falls back to the step_order-derived sequence in
+    # pv_step_sequence()) -- not as "zero acceptable paths", which would
+    # silently make conformance unscorable (NA) for every case.
+    if (!is.null(entry$step_variants) && length(entry$step_variants) > 0) {
       step_label_by_slug <- stats::setNames(
         vapply(subs, function(s) s$step_label %||% pv_prettify_label(s$step), character(1)),
         vapply(subs, function(s) s$step, character(1))
