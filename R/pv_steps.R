@@ -1,9 +1,14 @@
 #' Business-process-level step sequence (the "ideal" business flow)
 #'
 #' A business process's intended flow isn't a separately-authored ideal
-#' process file -- it's simply the step order already declared in the
-#' registry (see [pv_load_registry()]'s `$steps`). This wraps that ordered
-#' step vector as a single-variant list, shaped the way
+#' process file -- by default it's simply the step order already declared
+#' in the registry (see [pv_load_registry()]'s `$steps`), wrapped as a
+#' single-variant list. A process whose real flow branches or loops back
+#' to an earlier step can instead declare `step_variants` in the registry
+#' (see [pv_load_registry()]'s docs) -- when present, those declared
+#' step-label sequences are used instead, so business-level conformance
+#' can score a branch or a rework loop as a legitimate path rather than a
+#' deviation. Either way this is shaped the way
 #' [pv_case_conformance()]/[pv_process_conformance()] expect, so
 #' business-level conformance reuses the exact same scoring mechanism as
 #' app-level conformance -- just fed steps instead of one app's own
@@ -11,10 +16,17 @@
 #'
 #' @param registry a [pv_load_registry()] result.
 #' @param process_id a `process_id` from `registry$processes`.
-#' @return a list: `variants` (a length-1 list containing the ordered step
-#'   vector). Zero-length if the process declares no steps yet.
+#' @return a list: `variants` (a list of step-label sequences -- the
+#'   declared `step_variants` if any, else a length-1 list containing the
+#'   `step_order`-derived sequence). Zero-length if the process declares
+#'   no steps yet and no `step_variants` either.
 #' @export
 pv_step_sequence <- function(registry, process_id) {
+  declared <- registry$step_variants[[process_id]]
+  if (!is.null(declared)) {
+    return(list(variants = declared))
+  }
+
   steps <- registry$steps[registry$steps$process_id == process_id, ]
   steps <- steps[order(steps$step_order), ]
   if (nrow(steps) == 0) {

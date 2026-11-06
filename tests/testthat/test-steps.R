@@ -33,6 +33,20 @@ test_that("pv_step_sequence returns a zero-length variant list for a process wit
   expect_equal(seq$variants, list())
 })
 
+test_that("pv_step_sequence prefers declared step_variants over the step_order-derived sequence", {
+  reg <- fixture_registry_2steps()
+  reg$step_variants <- list(proc1 = list(c("Draft", "Review"), c("Draft", "Review", "Draft", "Review")))
+  seq <- pv_step_sequence(reg, "proc1")
+  expect_equal(seq$variants, list(c("Draft", "Review"), c("Draft", "Review", "Draft", "Review")))
+})
+
+test_that("pv_step_sequence falls back to step_order when no step_variants are declared for this process", {
+  reg <- fixture_registry_2steps()
+  reg$step_variants <- list(some_other_process = list(c("A", "B")))
+  seq <- pv_step_sequence(reg, "proc1")
+  expect_equal(seq$variants, list(c("Draft", "Review")))
+})
+
 test_that("pv_events_at_step_level relabels activity_id to step_label and collapses consecutive repeats", {
   subs <- data.frame(subprocess = c("sub1", "sub2"), step_label = c("Draft", "Review"), stringsAsFactors = FALSE)
   events <- data.frame(

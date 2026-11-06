@@ -25,6 +25,14 @@ test_that("pv_demo_registry produces a connectable, step-aware registry with lin
   expect_true(any(draft_conf$score < 1)) # noise_prob > 0 should produce at least one imperfect draft trace
   expect_true(any(draft_conf$score == 1))
 
+  # rework_prob > 0 means some rejected cases loop back to the draft app
+  # for a second pass -- a real step loop (Draft -> Review -> Draft ->
+  # Review), declared acceptable via the registry's step_variants (see
+  # pv_load_registry()), not just tolerated as noise.
+  biz_events <- pv_pull_business_events(pv_con, reg, "type_curve_construction")
+  trace_lens <- vapply(split(biz_events$activity_id, biz_events$case_id), length, integer(1))
+  expect_true(any(trace_lens == 4)) # at least one genuinely looped case
+
   biz_conf <- pv_business_process_conformance(pv_con, reg, "type_curve_construction")
-  expect_true(all(biz_conf$score == 1)) # step order (draft -> review) is never violated
+  expect_true(all(biz_conf$score == 1)) # both the straight-through and the looped path are declared ideal
 })

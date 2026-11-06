@@ -44,7 +44,8 @@ pv_demo_registry <- function(dir = tempfile("proviz_demo_"), seed = 42) {
     ),
     review_users = c("q.alvarez", "r.kim"),
     review_role_of_user = c(q.alvarez = "Super User", r.kim = "Super User"),
-    start_date = Sys.Date() - 120, noise_prob = 0.25, provisional_prob = 0.5, reject_prob = 0.12
+    start_date = Sys.Date() - 120, noise_prob = 0.25, provisional_prob = 0.5,
+    reject_prob = 0.12, rework_prob = 0.6
   )
   pv_demo_seed_store(
     path = ds_path, macroprocess = "production_operations", process = "Daily Production Surveillance",
@@ -88,9 +89,18 @@ pv_demo_registry <- function(dir = tempfile("proviz_demo_"), seed = 42) {
     "type_curve_construction::type_curve_review_module" = ideal_review,
     "daily_production_surveillance::surveillance_app" = ideal_ds
   )
+  step_variants <- list(
+    type_curve_construction = list(
+      c("Draft", "Review & Publish"), # straight-through: approved on the first pass
+      c("Draft", "Review & Publish", "Draft", "Review & Publish") # one rework loop
+    )
+  )
 
   structure(
-    list(processes = processes, subprocesses = subprocesses, steps = pv_derive_steps(subprocesses), ideal = ideal),
+    list(
+      processes = processes, subprocesses = subprocesses, steps = pv_derive_steps(subprocesses),
+      ideal = ideal, step_variants = step_variants
+    ),
     class = "pv_registry"
   )
 }
@@ -163,11 +173,21 @@ pv_demo_seed_store <- function(path, macroprocess, process, subprocess, ideal, n
 #' so the review app can log every one of its own events directly under
 #' the permanent `entity_id`, exactly as a real second app would once the
 #' upstream record already exists.
+#'
+#' A rejected case has a `rework_prob` chance of looping back to the
+#' draft app for one more (shorter) pass before a second, successful
+#' review -- a real business-level step loop (`Draft -> Review -> Draft
+#' -> Review`), demonstrating the registry's `step_variants` (see
+#' [pv_load_registry()]) rather than only ever producing the
+#' straight-through `Draft -> Review` trace. A rejected case that
+#' *doesn't* get reworked stays abandoned (no further events) -- still a
+#' legitimate "incomplete" outcome, same as the single-app demo store's
+#' unlinked provisional cases.
 #' @noRd
 pv_demo_seed_type_curve <- function(draft_path, review_path, ideal_draft, ideal_review, n_cases,
                                      entity_prefix, draft_users, draft_role_of_user,
                                      review_users, review_role_of_user, start_date,
-                                     noise_prob, provisional_prob, reject_prob) {
+                                     noise_prob, provisional_prob, reject_prob, rework_prob = 0) {
   pt_draft <- protrace::pt_connect(draft_path, "reservoir_engineering", "Type Curve Construction", "type_curve_module")
   pt_review <- protrace::pt_connect(review_path, "reservoir_engineering", "Type Curve Construction", "type_curve_review_module")
   on.exit({
@@ -230,6 +250,30 @@ pv_demo_seed_type_curve <- function(draft_path, review_path, ideal_draft, ideal_
         user_id = review_user, entity_id = NA_character_,
         role = unname(review_role_of_user[review_user]), occurred_at = cur_time
       )
+    }
+
+    if (rejected && stats::runif(1) < rework_prob) {
+      cur_time <- cur_time + stats::runif(1, 1, 2) * 86400
+      rework_user <- sample(draft_users, 1)
+      for (aid in c("Adjust_Fitted_Curve", "Save_Draft")) {
+        cur_time <- cur_time + stats::runif(1, 10, 60) * 60
+        protrace::pt_log_event(pt_draft,
+          case_id = entity_id, activity_id = aid, session_id = paste0("s_draft2_", i),
+          user_id = rework_user, entity_id = NA_character_,
+          role = unname(draft_role_of_user[rework_user]), occurred_at = cur_time
+        )
+      }
+
+      cur_time <- cur_time + stats::runif(1, 1, 2) * 86400
+      review_user2 <- sample(review_users, 1)
+      for (aid in straight_through_review) {
+        cur_time <- cur_time + stats::runif(1, 10, 120) * 60
+        protrace::pt_log_event(pt_review,
+          case_id = entity_id, activity_id = aid, session_id = paste0("s_review2_", i),
+          user_id = review_user2, entity_id = NA_character_,
+          role = unname(review_role_of_user[review_user2]), occurred_at = cur_time
+        )
+      }
     }
   }
   invisible(list(draft_path = draft_path, review_path = review_path))

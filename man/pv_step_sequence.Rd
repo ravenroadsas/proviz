@@ -12,14 +12,21 @@ pv_step_sequence(registry, process_id)
 \item{process_id}{a \code{process_id} from \code{registry$processes}.}
 }
 \value{
-a list: \code{variants} (a length-1 list containing the ordered step
-vector). Zero-length if the process declares no steps yet.
+a list: \code{variants} (a list of step-label sequences -- the
+declared \code{step_variants} if any, else a length-1 list containing the
+\code{step_order}-derived sequence). Zero-length if the process declares
+no steps yet and no \code{step_variants} either.
 }
 \description{
 A business process's intended flow isn't a separately-authored ideal
-process file -- it's simply the step order already declared in the
-registry (see \code{\link[=pv_load_registry]{pv_load_registry()}}'s \verb{$steps}). This wraps that ordered
-step vector as a single-variant list, shaped the way
+process file -- by default it's simply the step order already declared
+in the registry (see \code{\link[=pv_load_registry]{pv_load_registry()}}'s \verb{$steps}), wrapped as a
+single-variant list. A process whose real flow branches or loops back
+to an earlier step can instead declare \code{step_variants} in the registry
+(see \code{\link[=pv_load_registry]{pv_load_registry()}}'s docs) -- when present, those declared
+step-label sequences are used instead, so business-level conformance
+can score a branch or a rework loop as a legitimate path rather than a
+deviation. Either way this is shaped the way
 \code{\link[=pv_case_conformance]{pv_case_conformance()}}/\code{\link[=pv_process_conformance]{pv_process_conformance()}} expect, so
 business-level conformance reuses the exact same scoring mechanism as
 app-level conformance -- just fed steps instead of one app's own

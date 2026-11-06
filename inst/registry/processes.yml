@@ -34,6 +34,12 @@
 # they're scoped (Step 2-3 of the playbook, before any instrumentation
 # exists); `duckdb_path` is required only once status == instrumented,
 # naming the local DuckDB file pv_connect_registry() will ATTACH.
+#
+# step_variants: optional -- a list of acceptable step-slug sequences for
+# a business process whose real flow branches or loops back to an
+# earlier step (see pv_step_sequence()). Omit it and the process's
+# business-level "ideal flow" is just its steps in step_order, a single
+# straight-through sequence.
 
 - process_id: type_curve_construction
   macroprocess: reservoir_engineering
@@ -41,6 +47,9 @@
   owner: "Reservoir Engineering Lead"
   status: instrumented
   loop_length: medium
+  step_variants:
+    - [draft, review] # straight-through: approved on the first pass
+    - [draft, review, draft, review] # one rework loop: rejected, redrafted, re-reviewed
   subprocesses:
     - app: typecurves
       subprocess: type_curve_module

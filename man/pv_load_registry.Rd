@@ -35,6 +35,11 @@ authored.}
 (one entry per app, not per business process), of
 \code{\link[=pv_load_ideal_process]{pv_load_ideal_process()}} results -- \code{NULL} for an app with no
 \code{ideal_process} entry or a missing file.}
+\item{\verb{$step_variants}}{a named list, keyed by \code{process_id}, of
+declared acceptable step-label sequences (each a character
+vector) -- absent (\code{NULL} via \code{[[}) for a process that didn't
+declare \code{step_variants}, in which case \code{\link[=pv_step_sequence]{pv_step_sequence()}} falls
+back to the single \code{step_order}-derived sequence.}
 }
 }
 \description{
@@ -50,4 +55,15 @@ each step is carried out by one or more ordered \strong{apps} (an app's own
 internal activities/variants/outcomes -- its own ideal process -- are
 declared per app, via that app's own \verb{ideal_process:} entry, not at the
 business-process level: see \code{\link[=pv_load_ideal_process]{pv_load_ideal_process()}}).
+
+By default the business-level "ideal flow" is just the step order
+itself, a single straight-through sequence (see \code{\link[=pv_step_sequence]{pv_step_sequence()}}).
+A process whose real flow branches or loops back to an earlier step
+can instead declare \code{step_variants}: a list of acceptable step-slug
+sequences, mirroring how an app's own \code{ideal_process} declares
+multiple \code{variants} -- a branch is just two variants that share a
+prefix then diverge, and a loop is a variant that repeats a step slug.
+When present, this overrides the single \code{step_order}-derived sequence
+for conformance purposes; \code{step_order} still orders the step-flow
+display either way.
 }

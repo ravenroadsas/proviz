@@ -12,6 +12,17 @@
 #' declared per app, via that app's own `ideal_process:` entry, not at the
 #' business-process level: see [pv_load_ideal_process()]).
 #'
+#' By default the business-level "ideal flow" is just the step order
+#' itself, a single straight-through sequence (see [pv_step_sequence()]).
+#' A process whose real flow branches or loops back to an earlier step
+#' can instead declare `step_variants`: a list of acceptable step-slug
+#' sequences, mirroring how an app's own `ideal_process` declares
+#' multiple `variants` -- a branch is just two variants that share a
+#' prefix then diverge, and a loop is a variant that repeats a step slug.
+#' When present, this overrides the single `step_order`-derived sequence
+#' for conformance purposes; `step_order` still orders the step-flow
+#' display either way.
+#'
 #' @param path path to a registry YAML file. Defaults to the registry
 #'   shipped with the package (`system.file("registry/processes.yml",
 #'   package = "proviz")`) -- pass an explicit path to use a real
@@ -37,6 +48,11 @@
 #'       (one entry per app, not per business process), of
 #'       [pv_load_ideal_process()] results -- `NULL` for an app with no
 #'       `ideal_process` entry or a missing file.}
+#'     \item{`$step_variants`}{a named list, keyed by `process_id`, of
+#'       declared acceptable step-label sequences (each a character
+#'       vector) -- absent (`NULL` via `[[`) for a process that didn't
+#'       declare `step_variants`, in which case [pv_step_sequence()] falls
+#'       back to the single `step_order`-derived sequence.}
 #'   }
 #' @export
 pv_load_registry <- function(path = system.file("registry/processes.yml", package = "proviz")) {
@@ -54,6 +70,7 @@ pv_load_registry <- function(path = system.file("registry/processes.yml", packag
   processes <- list()
   subprocesses <- list()
   ideal <- list()
+  step_variants <- list()
 
   for (entry in entries) {
     missing <- setdiff(required_fields, names(entry))
@@ -139,6 +156,24 @@ pv_load_registry <- function(path = system.file("registry/processes.yml", packag
         ideal[[ideal_key]] <- NULL
       }
     }
+
+    if (!is.null(entry$step_variants)) {
+      step_label_by_slug <- stats::setNames(
+        vapply(subs, function(s) s$step_label %||% pv_prettify_label(s$step), character(1)),
+        vapply(subs, function(s) s$step, character(1))
+      )
+      step_label_by_slug <- step_label_by_slug[!duplicated(names(step_label_by_slug))]
+
+      declared <- lapply(entry$step_variants, function(v) as.character(unlist(v)))
+      unknown <- unique(unlist(lapply(declared, setdiff, y = names(step_label_by_slug))))
+      if (length(unknown) > 0) {
+        stop("proviz: registry entry '", entry$process_id,
+          "' has step_variants referencing unknown step(s): ", paste(unknown, collapse = ", "),
+          call. = FALSE
+        )
+      }
+      step_variants[[entry$process_id]] <- lapply(declared, function(v) unname(step_label_by_slug[v]))
+    }
   }
 
   processes <- do.call(rbind, processes)
@@ -160,7 +195,10 @@ pv_load_registry <- function(path = system.file("registry/processes.yml", packag
   rownames(subprocesses) <- NULL
 
   structure(
-    list(processes = processes, subprocesses = subprocesses, steps = pv_derive_steps(subprocesses), ideal = ideal),
+    list(
+      processes = processes, subprocesses = subprocesses, steps = pv_derive_steps(subprocesses),
+      ideal = ideal, step_variants = step_variants
+    ),
     class = "pv_registry"
   )
 }
