@@ -2,7 +2,7 @@
 % Please edit documentation in R/mod_overview.R
 \name{mod_overview_ui}
 \alias{mod_overview_ui}
-\title{Overview tab: registry-wide KPIs and the process list}
+\title{Portfolio overview tab: portfolio-wide KPIs and the business-process list}
 \usage{
 mod_overview_ui(id)
 }
@@ -10,5 +10,9 @@ mod_overview_ui(id)
 \item{id}{module id.}
 }
 \description{
-Overview tab: registry-wide KPIs and the process list
+The dashboard's landing tab -- a portfolio-of-processes view, not a
+single process's own detail (see \code{\link[=mod_business_detail_ui]{mod_business_detail_ui()}} for that):
+how many business processes are registered, how much of their declared
+step map is actually monitored, and usage/completion totals across the
+whole portfolio.
 }

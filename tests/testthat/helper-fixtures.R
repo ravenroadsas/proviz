@@ -14,6 +14,12 @@ local_fixture_registry <- function(env = parent.frame()) {
   )
   protrace::pt_disconnect(pt_con)
 
+  subprocesses <- data.frame(
+    process_id = "type_curve_construction", app = "typecurves",
+    subprocess = "type_curve_module", step = "draft", step_label = "Draft",
+    step_order = 1L, app_order = 1L, duckdb_path = db_path, stringsAsFactors = FALSE
+  )
+
   structure(
     list(
       processes = data.frame(
@@ -24,12 +30,10 @@ local_fixture_registry <- function(env = parent.frame()) {
         loop_length = c("medium", "medium"),
         stringsAsFactors = FALSE
       ),
-      subprocesses = data.frame(
-        process_id = "type_curve_construction", app = "typecurves",
-        subprocess = "type_curve_module", duckdb_path = db_path, stringsAsFactors = FALSE
-      ),
+      subprocesses = subprocesses,
+      steps = pv_derive_steps(subprocesses),
       ideal = list(
-        type_curve_construction = structure(
+        "type_curve_construction::type_curve_module" = structure(
           list(
             variants = list(c("a", "b")),
             outcomes = data.frame(
@@ -40,8 +44,7 @@ local_fixture_registry <- function(env = parent.frame()) {
             outcome_exclusivity = "single"
           ),
           class = "pv_ideal_process"
-        ),
-        not_yet = NULL
+        )
       )
     ),
     class = "pv_registry"

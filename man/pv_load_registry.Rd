@@ -14,22 +14,40 @@ shipped with the package (\code{system.file("registry/processes.yml", package = 
 organization-specific registry instead.}
 }
 \value{
-a \code{pv_registry} object (a list): \verb{$processes} (one row per
-process: \code{process_id}, \code{macroprocess}, \code{process}, \code{owner}, \code{status},
-\code{loop_length} -- \code{"short"}/\code{"medium"}/\code{"long"}, how immediate the
-process's outcome and the data behind it are, e.g. daily production
-surveillance is short-loop, reserves estimation is long-loop),
-\verb{$subprocesses} (one row per app/module a process spans: \code{process_id},
-\code{app}, \code{subprocess}, \code{duckdb_path} -- \code{NA} until the process is
-\code{instrumented}, zero rows for a process with no app scoped yet), and
-\verb{$ideal} (a named list, keyed by \code{process_id}, of
-\code{\link[=pv_load_ideal_process]{pv_load_ideal_process()}} results -- \code{NULL} for a process with no
-\code{ideal_process} entry or a missing file).
+a \code{pv_registry} object (a list):
+\describe{
+\item{\verb{$processes}}{one row per business process: \code{process_id},
+\code{macroprocess}, \code{process}, \code{owner}, \code{status}, \code{loop_length} --
+\code{"short"}/\code{"medium"}/\code{"long"}, how immediate the process's outcome
+and the data behind it are, e.g. daily production surveillance is
+short-loop, reserves estimation is long-loop.}
+\item{\verb{$subprocesses}}{one row per app/step a process spans:
+\code{process_id}, \code{app}, \code{subprocess}, \code{step} (a slug grouping one or
+more apps into the same ordered step), \code{step_label}, \code{step_order}
+(position of the step within the process), \code{app_order} (position
+of this app within its step), \code{duckdb_path} (\code{NA} until the app is
+instrumented). Zero rows for a process with no app scoped yet.}
+\item{\verb{$steps}}{one row per distinct (process, step), derived from
+\verb{$subprocesses}: \code{process_id}, \code{step}, \code{step_label}, \code{step_order}
+-- ordered within each process. A convenience view; not separately
+authored.}
+\item{\verb{$ideal}}{a named list, keyed by \code{"<process_id>::<subprocess>"}
+(one entry per app, not per business process), of
+\code{\link[=pv_load_ideal_process]{pv_load_ideal_process()}} results -- \code{NULL} for an app with no
+\code{ideal_process} entry or a missing file.}
+}
 }
 \description{
-The registry is the source of truth for the dashboard's overview tab and
-its coverage KPI: one row per target business process, whether or not it
-is instrumented yet (see \code{inst/registry/processes.yml} for the format and
-field meanings, and the process mining playbook's Step 1-3 for how a
-process gets added here).
+The registry is the source of truth for the dashboard's portfolio
+overview and its coverage KPI: one row per target business process,
+whether or not it is instrumented yet (see \code{inst/registry/processes.yml}
+for the format and field meanings, and the process mining playbook's
+Step 1-3 for how a process gets added here).
+}
+\details{
+A business process is composed of one or more ordered \strong{steps}, and
+each step is carried out by one or more ordered \strong{apps} (an app's own
+internal activities/variants/outcomes -- its own ideal process -- are
+declared per app, via that app's own \verb{ideal_process:} entry, not at the
+business-process level: see \code{\link[=pv_load_ideal_process]{pv_load_ideal_process()}}).
 }

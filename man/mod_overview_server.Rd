@@ -2,7 +2,7 @@
 % Please edit documentation in R/mod_overview.R
 \name{mod_overview_server}
 \alias{mod_overview_server}
-\title{Server logic for the overview tab}
+\title{Server logic for the portfolio overview tab}
 \usage{
 mod_overview_server(id, pv_con, registry)
 }
@@ -15,9 +15,9 @@ mod_overview_server(id, pv_con, registry)
 }
 \value{
 a list: \code{selected_process}, a reactive giving the \code{process_id}
-the user asked to deep-dive into (\code{NULL} until "Open deep-dive" is
-clicked).
+the user asked to open ("Open business process" clicked). \code{NULL}
+until clicked.
 }
 \description{
-Server logic for the overview tab
+Server logic for the portfolio overview tab
 }

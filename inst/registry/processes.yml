@@ -20,17 +20,20 @@
 # (a curve's real quality shows up over weeks/months of new well data);
 # reserves estimation would be long-loop (the outcome plays out over years).
 #
-# ideal_process: path (relative to this file's directory) to the
-# activities+variants+outcomes YAML pv_load_ideal_process() reads -- see
-# that file's `outcomes` block for how each process ends (a deliverable,
-# one or more named decisions, or both) and which app (if any) tracks each
-# decision's eventual real-world result.
-#
-# subprocesses: app/module(s) this process spans. `app`/`subprocess` can
-# be declared as soon as they're scoped (Step 2-3 of the playbook, before
-# any instrumentation exists); `duckdb_path` is required only once
-# status == instrumented, naming the local DuckDB file
-# pv_connect_registry() will ATTACH.
+# subprocesses: app/module(s) this process spans, grouped into ordered
+# **steps** (the business process's own flow -- see pv_step_sequence()):
+# `step`/`step_order` group one or more apps into the same ordered step
+# (`step_label` defaults to a prettified `step` if omitted); `app_order`
+# positions an app within its step (defaults to declaration order). Each
+# app declares its own `ideal_process` (path, relative to this file's
+# directory, to the activities+variants+outcomes YAML
+# pv_load_ideal_process() reads -- see that file's `outcomes` block for
+# how the app's own activity ends, e.g. a deliverable or a named decision)
+# -- there is no process-level `ideal_process` field anymore.
+# `app`/`subprocess`/`step`/`step_order` can be declared as soon as
+# they're scoped (Step 2-3 of the playbook, before any instrumentation
+# exists); `duckdb_path` is required only once status == instrumented,
+# naming the local DuckDB file pv_connect_registry() will ATTACH.
 
 - process_id: type_curve_construction
   macroprocess: reservoir_engineering
@@ -38,11 +41,21 @@
   owner: "Reservoir Engineering Lead"
   status: instrumented
   loop_length: medium
-  ideal_process: ideal_processes/type_curve_construction.yml
   subprocesses:
     - app: typecurves
       subprocess: type_curve_module
+      step: draft
+      step_label: "Draft"
+      step_order: 1
+      ideal_process: ideal_processes/type_curve_draft.yml
       duckdb_path: /mnt/shared/apps/typecurves/protrace.duckdb
+    - app: typecurve_review
+      subprocess: type_curve_review_module
+      step: review
+      step_label: "Review & Publish"
+      step_order: 2
+      ideal_process: ideal_processes/type_curve_review.yml
+      duckdb_path: /mnt/shared/apps/typecurve_review/protrace.duckdb
 
 - process_id: daily_production_surveillance
   macroprocess: production_operations
@@ -50,7 +63,10 @@
   owner: "Production Engineering Lead"
   status: designed
   loop_length: short
-  ideal_process: ideal_processes/daily_production_surveillance.yml
   subprocesses:
     - app: surveillance
       subprocess: surveillance_app
+      step: surveillance
+      step_label: "Surveillance"
+      step_order: 1
+      ideal_process: ideal_processes/daily_production_surveillance.yml

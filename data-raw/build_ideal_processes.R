@@ -121,17 +121,23 @@ yaml::write_yaml(
 )
 
 ## -----------------------------------------------------------------------
-## Process 2: type curve construction (loop/lifecycle-heavy). The PoC's
-## generate_case() allows 0-3 rework passes on two independent loops plus
-## an open-ended review/rejection cycle -- exhaustively enumerating every
-## loop count is not a meaningful "ideal" set (that's exactly why v1 scores
-## conformance by edit distance rather than exact match). Declaring a small
-## set of representative variants instead: this is an illustrative choice
-## for demo data, not a substitute for the domain SME sign-off the playbook
-## calls for in Step 1 when onboarding a real process.
+## Process 2: type curve construction (loop/lifecycle-heavy) -- now a
+## *two-app* business process (see the playbook's step/app model): a
+## drafting app builds and saves the curve, a separate review app
+## postulates it for super-user review and publishes it. Each app owns its
+## own ideal process (its own activities/variants/outcomes); the business
+## process's own "ideal flow" is just its step order (draft -> review),
+## not a separately-authored file -- see pv_step_sequence(). The PoC's
+## generate_case() allows 0-3 rework passes on two independent loops --
+## exhaustively enumerating every loop count is not a meaningful "ideal"
+## set (that's exactly why v1 scores conformance by edit distance rather
+## than exact match). Declaring a small set of representative variants
+## instead: this is an illustrative choice for demo data, not a substitute
+## for the domain SME sign-off the playbook calls for in Step 1 when
+## onboarding a real process.
 ## -----------------------------------------------------------------------
 
-type_curve_activities <- list(
+type_curve_draft_activities <- list(
   list(id = "Define_Population_Criteria", label = "Define Type Well Population Criteria", role = "Reservoir Engineer"),
   list(id = "Query_Analog_Wells",         label = "Query Candidate Analog Wells",          role = "Data Analyst"),
   list(id = "Review_Analog_Statistics",   label = "Review Analog Set Statistics",          role = "Reservoir Engineer"),
@@ -141,31 +147,53 @@ type_curve_activities <- list(
   list(id = "Fit_Decline_Curve",          label = "Fit Decline Curve Model",               role = "Reservoir Engineer"),
   list(id = "Adjust_Fitted_Curve",        label = "Manually Adjust Fitted Curve",          role = "Reservoir Engineer"),
   list(id = "Compare_Existing_Curves",    label = "Compare Against Existing Type Curves",  role = "Reservoir Engineer"),
-  list(id = "Save_Draft",                 label = "Save / Export Type Curve (Draft)",      role = "Reservoir Engineer"),
-  list(id = "Postulate_For_Review",       label = "Postulate Draft for Review",            role = "Reservoir Engineer"),
-  list(id = "Super_User_Review",          label = "Super User Review",                     role = "Super User"),
-  list(id = "Publish_Official",           label = "Publish to Type Well Library",          role = "Super User")
+  list(id = "Save_Draft",                 label = "Save / Export Type Curve (Draft)",      role = "Reservoir Engineer")
 )
 
 base_front <- c("Define_Population_Criteria", "Query_Analog_Wells", "Review_Analog_Statistics")
 base_back  <- c("Normalize_Production_Data", "Generate_Aggregate_Curve", "Fit_Decline_Curve",
                 "Compare_Existing_Curves", "Save_Draft")
-submit_approve <- c("Postulate_For_Review", "Super_User_Review", "Publish_Official")
 
-type_curve_variants <- list(
-  ## Straight-through: no rework, approved first pass.
-  c(base_front, base_back, submit_approve),
+type_curve_draft_variants <- list(
+  ## Straight-through: no rework.
+  c(base_front, base_back),
   ## One analog-refinement loop before proceeding.
-  c(base_front, "Refine_Analog_Selection", "Review_Analog_Statistics", base_back, submit_approve),
+  c(base_front, "Refine_Analog_Selection", "Review_Analog_Statistics", base_back),
   ## One manual curve-adjustment pass.
   c(base_front, "Normalize_Production_Data", "Generate_Aggregate_Curve", "Fit_Decline_Curve",
-    "Adjust_Fitted_Curve", "Compare_Existing_Curves", "Save_Draft", submit_approve),
-  ## One rejection -> curve rework -> resubmit -> approved cycle.
-  c(base_front, base_back, "Postulate_For_Review", "Super_User_Review",
-    "Adjust_Fitted_Curve", "Save_Draft", submit_approve)
+    "Adjust_Fitted_Curve", "Compare_Existing_Curves", "Save_Draft")
 )
 
-type_curve_outcomes <- list(
+type_curve_draft_outcomes <- list(
+  list(
+    id = "draft_saved", label = "Draft saved, ready for review", kind = "deliverable",
+    activity_id = "Save_Draft"
+  )
+)
+
+yaml::write_yaml(
+  list(
+    process_id = "type_curve_construction",
+    activities = type_curve_draft_activities,
+    variants = type_curve_draft_variants,
+    outcomes = type_curve_draft_outcomes,
+    outcome_exclusivity = "single"
+  ),
+  file.path(out_dir, "type_curve_draft.yml")
+)
+
+type_curve_review_activities <- list(
+  list(id = "Postulate_For_Review", label = "Postulate Draft for Review",            role = "Reservoir Engineer"),
+  list(id = "Super_User_Review",    label = "Super User Review",                     role = "Super User"),
+  list(id = "Reject_Draft",         label = "Reject Draft (Send Back for Rework)",   role = "Super User"),
+  list(id = "Publish_Official",     label = "Publish to Type Well Library",          role = "Super User")
+)
+
+type_curve_review_variants <- list(
+  c("Postulate_For_Review", "Super_User_Review", "Publish_Official")
+)
+
+type_curve_review_outcomes <- list(
   list(
     id = "publish_official", label = "Type curve published (Official)", kind = "deliverable",
     activity_id = "Publish_Official"
@@ -175,13 +203,14 @@ type_curve_outcomes <- list(
 yaml::write_yaml(
   list(
     process_id = "type_curve_construction",
-    activities = type_curve_activities,
-    variants = type_curve_variants,
-    outcomes = type_curve_outcomes,
+    activities = type_curve_review_activities,
+    variants = type_curve_review_variants,
+    outcomes = type_curve_review_outcomes,
     outcome_exclusivity = "single"
   ),
-  file.path(out_dir, "type_curve_construction.yml")
+  file.path(out_dir, "type_curve_review.yml")
 )
 
-cat("Wrote", length(surveillance_variants), "surveillance variants and",
-    length(type_curve_variants), "type-curve variants.\n")
+cat("Wrote", length(surveillance_variants), "surveillance variants,",
+    length(type_curve_draft_variants), "type-curve-draft variants, and",
+    length(type_curve_review_variants), "type-curve-review variant(s).\n")

@@ -1,26 +1,43 @@
 #' Load and validate the process registry
 #'
-#' The registry is the source of truth for the dashboard's overview tab and
-#' its coverage KPI: one row per target business process, whether or not it
-#' is instrumented yet (see `inst/registry/processes.yml` for the format and
-#' field meanings, and the process mining playbook's Step 1-3 for how a
-#' process gets added here).
+#' The registry is the source of truth for the dashboard's portfolio
+#' overview and its coverage KPI: one row per target business process,
+#' whether or not it is instrumented yet (see `inst/registry/processes.yml`
+#' for the format and field meanings, and the process mining playbook's
+#' Step 1-3 for how a process gets added here).
+#'
+#' A business process is composed of one or more ordered **steps**, and
+#' each step is carried out by one or more ordered **apps** (an app's own
+#' internal activities/variants/outcomes -- its own ideal process -- are
+#' declared per app, via that app's own `ideal_process:` entry, not at the
+#' business-process level: see [pv_load_ideal_process()]).
 #'
 #' @param path path to a registry YAML file. Defaults to the registry
 #'   shipped with the package (`system.file("registry/processes.yml",
 #'   package = "proviz")`) -- pass an explicit path to use a real
 #'   organization-specific registry instead.
-#' @return a `pv_registry` object (a list): `$processes` (one row per
-#'   process: `process_id`, `macroprocess`, `process`, `owner`, `status`,
-#'   `loop_length` -- `"short"`/`"medium"`/`"long"`, how immediate the
-#'   process's outcome and the data behind it are, e.g. daily production
-#'   surveillance is short-loop, reserves estimation is long-loop),
-#'   `$subprocesses` (one row per app/module a process spans: `process_id`,
-#'   `app`, `subprocess`, `duckdb_path` -- `NA` until the process is
-#'   `instrumented`, zero rows for a process with no app scoped yet), and
-#'   `$ideal` (a named list, keyed by `process_id`, of
-#'   [pv_load_ideal_process()] results -- `NULL` for a process with no
-#'   `ideal_process` entry or a missing file).
+#' @return a `pv_registry` object (a list):
+#'   \describe{
+#'     \item{`$processes`}{one row per business process: `process_id`,
+#'       `macroprocess`, `process`, `owner`, `status`, `loop_length` --
+#'       `"short"`/`"medium"`/`"long"`, how immediate the process's outcome
+#'       and the data behind it are, e.g. daily production surveillance is
+#'       short-loop, reserves estimation is long-loop.}
+#'     \item{`$subprocesses`}{one row per app/step a process spans:
+#'       `process_id`, `app`, `subprocess`, `step` (a slug grouping one or
+#'       more apps into the same ordered step), `step_label`, `step_order`
+#'       (position of the step within the process), `app_order` (position
+#'       of this app within its step), `duckdb_path` (`NA` until the app is
+#'       instrumented). Zero rows for a process with no app scoped yet.}
+#'     \item{`$steps`}{one row per distinct (process, step), derived from
+#'       `$subprocesses`: `process_id`, `step`, `step_label`, `step_order`
+#'       -- ordered within each process. A convenience view; not separately
+#'       authored.}
+#'     \item{`$ideal`}{a named list, keyed by `"<process_id>::<subprocess>"`
+#'       (one entry per app, not per business process), of
+#'       [pv_load_ideal_process()] results -- `NULL` for an app with no
+#'       `ideal_process` entry or a missing file.}
+#'   }
 #' @export
 pv_load_registry <- function(path = system.file("registry/processes.yml", package = "proviz")) {
   stopifnot(is.character(path), length(path) == 1, file.exists(path))
@@ -58,6 +75,12 @@ pv_load_registry <- function(path = system.file("registry/processes.yml", packag
         call. = FALSE
       )
     }
+    if (!is.null(entry$ideal_process)) {
+      warning("proviz: registry entry '", entry$process_id, "' has a process-level 'ideal_process' field, ",
+        "which is no longer used -- each app now declares its own 'ideal_process' on its subprocess entry. Ignoring it.",
+        call. = FALSE
+      )
+    }
 
     processes[[length(processes) + 1]] <- data.frame(
       process_id = entry$process_id, macroprocess = entry$macroprocess,
@@ -73,12 +96,16 @@ pv_load_registry <- function(path = system.file("registry/processes.yml", packag
         call. = FALSE
       )
     }
+
+    step_counters <- list()
     for (s in subs) {
       # duckdb_path is only meaningful once there's a real store to attach --
       # a not-yet-instrumented process can still declare which app(s) it
-      # will live in as soon as that's scoped (playbook step 2-3), before
-      # any instrumentation (step 4) exists.
-      required_sub_fields <- if (entry$status == "instrumented") c("app", "subprocess", "duckdb_path") else c("app", "subprocess")
+      # will live in, and which step each belongs to, as soon as that's
+      # scoped (playbook step 2-3), before any instrumentation (step 4)
+      # exists.
+      required_sub_fields <- c("app", "subprocess", "step", "step_order")
+      if (entry$status == "instrumented") required_sub_fields <- c(required_sub_fields, "duckdb_path")
       sub_missing <- setdiff(required_sub_fields, names(s))
       if (length(sub_missing) > 0) {
         stop("proviz: a subprocess entry under '", entry$process_id,
@@ -86,25 +113,31 @@ pv_load_registry <- function(path = system.file("registry/processes.yml", packag
           call. = FALSE
         )
       }
+
+      step_counters[[s$step]] <- (step_counters[[s$step]] %||% 0L) + 1L
+
       subprocesses[[length(subprocesses) + 1]] <- data.frame(
-        process_id = entry$process_id, app = s$app,
-        subprocess = s$subprocess, duckdb_path = s$duckdb_path %||% NA_character_,
+        process_id = entry$process_id, app = s$app, subprocess = s$subprocess,
+        step = s$step, step_label = s$step_label %||% pv_prettify_label(s$step),
+        step_order = as.integer(s$step_order), app_order = as.integer(s$app_order %||% step_counters[[s$step]]),
+        duckdb_path = s$duckdb_path %||% NA_character_,
         stringsAsFactors = FALSE
       )
-    }
 
-    if (!is.null(entry$ideal_process)) {
-      ideal_path <- file.path(base_dir, entry$ideal_process)
-      if (file.exists(ideal_path)) {
-        ideal[[entry$process_id]] <- pv_load_ideal_process(ideal_path)
+      ideal_key <- paste(entry$process_id, s$subprocess, sep = "::")
+      if (!is.null(s$ideal_process)) {
+        ideal_path <- file.path(base_dir, s$ideal_process)
+        if (file.exists(ideal_path)) {
+          ideal[[ideal_key]] <- pv_load_ideal_process(ideal_path)
+        } else {
+          warning("proviz: ideal_process file for '", ideal_key, "' not found at '", ideal_path, "'",
+            call. = FALSE
+          )
+          ideal[[ideal_key]] <- NULL
+        }
       } else {
-        warning("proviz: ideal_process file for '", entry$process_id, "' not found at '", ideal_path, "'",
-          call. = FALSE
-        )
-        ideal[[entry$process_id]] <- NULL
+        ideal[[ideal_key]] <- NULL
       }
-    } else {
-      ideal[[entry$process_id]] <- NULL
     }
   }
 
@@ -118,15 +151,56 @@ pv_load_registry <- function(path = system.file("registry/processes.yml", packag
   subprocesses <- if (length(subprocesses) > 0) {
     do.call(rbind, subprocesses)
   } else {
-    data.frame(process_id = character(0), app = character(0), subprocess = character(0),
-      duckdb_path = character(0), stringsAsFactors = FALSE)
+    data.frame(
+      process_id = character(0), app = character(0), subprocess = character(0),
+      step = character(0), step_label = character(0), step_order = integer(0), app_order = integer(0),
+      duckdb_path = character(0), stringsAsFactors = FALSE
+    )
   }
   rownames(subprocesses) <- NULL
 
   structure(
-    list(processes = processes, subprocesses = subprocesses, ideal = ideal),
+    list(processes = processes, subprocesses = subprocesses, steps = pv_derive_steps(subprocesses), ideal = ideal),
     class = "pv_registry"
   )
+}
+
+#' @noRd
+pv_prettify_label <- function(x) {
+  words <- strsplit(gsub("[_-]+", " ", x), " ")[[1]]
+  words <- words[nzchar(words)]
+  paste(toupper(substring(words, 1, 1)), substring(words, 2), sep = "", collapse = " ")
+}
+
+#' One row per distinct (process, step), ordered -- derived from
+#' `subprocesses`, not separately authored, so it can't drift out of sync
+#' with the apps that actually declare each step.
+#' @noRd
+pv_derive_steps <- function(subprocesses) {
+  empty <- data.frame(
+    process_id = character(0), step = character(0), step_label = character(0),
+    step_order = integer(0), stringsAsFactors = FALSE
+  )
+  if (nrow(subprocesses) == 0) {
+    return(empty)
+  }
+
+  key <- paste(subprocesses$process_id, subprocesses$step, sep = "::")
+  groups <- split(subprocesses[c("step_order", "step_label")], key)
+  inconsistent <- names(groups)[vapply(groups, function(g) {
+    length(unique(g$step_order)) > 1 || length(unique(g$step_label)) > 1
+  }, logical(1))]
+  if (length(inconsistent) > 0) {
+    stop("proviz: apps sharing the same step disagree on step_order/step_label: ",
+      paste(inconsistent, collapse = ", "),
+      call. = FALSE
+    )
+  }
+
+  steps <- subprocesses[!duplicated(key), c("process_id", "step", "step_label", "step_order")]
+  steps <- steps[order(steps$process_id, steps$step_order), ]
+  rownames(steps) <- NULL
+  steps
 }
 
 #' Load and validate an ideal-process definition

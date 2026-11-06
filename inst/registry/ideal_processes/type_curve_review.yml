@@ -1,0 +1,24 @@
+process_id: type_curve_construction
+activities:
+- id: Postulate_For_Review
+  label: Postulate Draft for Review
+  role: Reservoir Engineer
+- id: Super_User_Review
+  label: Super User Review
+  role: Super User
+- id: Reject_Draft
+  label: Reject Draft (Send Back for Rework)
+  role: Super User
+- id: Publish_Official
+  label: Publish to Type Well Library
+  role: Super User
+variants:
+- - Postulate_For_Review
+  - Super_User_Review
+  - Publish_Official
+outcomes:
+- id: publish_official
+  label: Type curve published (Official)
+  kind: deliverable
+  activity_id: Publish_Official
+outcome_exclusivity: single

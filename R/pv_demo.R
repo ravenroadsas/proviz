@@ -2,12 +2,15 @@
 #'
 #' Writes real DuckDB event stores -- via `protrace::pt_connect()`/
 #' `pt_log_event()`, the exact API a real instrumented app uses, not a
-#' shortcut -- seeded with synthetic cases for the two ideal processes
-#' migrated from the original PoC, plus two placeholder registry rows in
-#' other statuses. Exists so `run_pi_dashboard(demo = TRUE)` (and this
-#' package's own screenshots/manual testing) can exercise every panel and
-#' every registry status without a real shared mount or real application
-#' data. Not a real organization's process list.
+#' shortcut -- seeded with synthetic cases for two business processes: a
+#' **two-app** business process (type curve construction: a drafting app
+#' and a separate review/publish app, cross-app case-linked, illustrating
+#' the step/app registry model end to end) and a single-app one (daily
+#' production surveillance), plus two placeholder registry rows in other
+#' statuses. Exists so `run_pi_dashboard(demo = TRUE)` (and this package's
+#' own screenshots/manual testing) can exercise every panel and every
+#' registry status without a real shared mount or real application data.
+#' Not a real organization's process list.
 #'
 #' @param dir directory to write the synthetic DuckDB files into. Defaults
 #'   to a fresh temp directory.
@@ -22,21 +25,26 @@ pv_demo_registry <- function(dir = tempfile("proviz_demo_"), seed = 42) {
   dir.create(dir, recursive = TRUE, showWarnings = FALSE)
   set.seed(seed)
 
-  ideal_tc <- pv_load_ideal_process(system.file("registry/ideal_processes/type_curve_construction.yml", package = "proviz"))
+  ideal_draft <- pv_load_ideal_process(system.file("registry/ideal_processes/type_curve_draft.yml", package = "proviz"))
+  ideal_review <- pv_load_ideal_process(system.file("registry/ideal_processes/type_curve_review.yml", package = "proviz"))
   ideal_ds <- pv_load_ideal_process(system.file("registry/ideal_processes/daily_production_surveillance.yml", package = "proviz"))
 
-  tc_path <- file.path(dir, "typecurves.duckdb")
+  draft_path <- file.path(dir, "typecurves_draft.duckdb")
+  review_path <- file.path(dir, "typecurves_review.duckdb")
   ds_path <- file.path(dir, "surveillance.duckdb")
 
-  pv_demo_seed_store(
-    path = tc_path, macroprocess = "reservoir_engineering", process = "Type Curve Construction",
-    subprocess = "type_curve_module", ideal = ideal_tc, n_cases = 140, entity_prefix = "CURVE",
-    users = c("l.fontaine", "m.adeyemi", "n.petrov", "o.haddad", "q.alvarez"),
-    role_of_user = c(
-      l.fontaine = "Reservoir Engineer", m.adeyemi = "Reservoir Engineer", n.petrov = "Reservoir Engineer",
-      o.haddad = "Data Analyst", q.alvarez = "Super User"
+  pv_demo_seed_type_curve(
+    draft_path = draft_path, review_path = review_path,
+    ideal_draft = ideal_draft, ideal_review = ideal_review,
+    n_cases = 140, entity_prefix = "CURVE",
+    draft_users = c("l.fontaine", "m.adeyemi", "n.petrov", "o.haddad"),
+    draft_role_of_user = c(
+      l.fontaine = "Reservoir Engineer", m.adeyemi = "Reservoir Engineer",
+      n.petrov = "Reservoir Engineer", o.haddad = "Data Analyst"
     ),
-    start_date = Sys.Date() - 120, noise_prob = 0.25, provisional_prob = 0.5
+    review_users = c("q.alvarez", "r.kim"),
+    review_role_of_user = c(q.alvarez = "Super User", r.kim = "Super User"),
+    start_date = Sys.Date() - 120, noise_prob = 0.25, provisional_prob = 0.5, reject_prob = 0.12
   )
   pv_demo_seed_store(
     path = ds_path, macroprocess = "production_operations", process = "Daily Production Surveillance",
@@ -65,18 +73,26 @@ pv_demo_registry <- function(dir = tempfile("proviz_demo_"), seed = 42) {
     stringsAsFactors = FALSE
   )
   subprocesses <- data.frame(
-    process_id = c("type_curve_construction", "daily_production_surveillance"),
-    app = c("typecurves", "surveillance"),
-    subprocess = c("type_curve_module", "surveillance_app"),
-    duckdb_path = c(tc_path, ds_path),
+    process_id = c("type_curve_construction", "type_curve_construction", "daily_production_surveillance"),
+    app = c("typecurves", "typecurve_review", "surveillance"),
+    subprocess = c("type_curve_module", "type_curve_review_module", "surveillance_app"),
+    step = c("draft", "review", "surveillance"),
+    step_label = c("Draft", "Review & Publish", "Surveillance"),
+    step_order = c(1L, 2L, 1L),
+    app_order = c(1L, 1L, 1L),
+    duckdb_path = c(draft_path, review_path, ds_path),
     stringsAsFactors = FALSE
   )
   ideal <- list(
-    type_curve_construction = ideal_tc, daily_production_surveillance = ideal_ds,
-    well_completion_reporting = NULL, legacy_ticketing = NULL
+    "type_curve_construction::type_curve_module" = ideal_draft,
+    "type_curve_construction::type_curve_review_module" = ideal_review,
+    "daily_production_surveillance::surveillance_app" = ideal_ds
   )
 
-  structure(list(processes = processes, subprocesses = subprocesses, ideal = ideal), class = "pv_registry")
+  structure(
+    list(processes = processes, subprocesses = subprocesses, steps = pv_derive_steps(subprocesses), ideal = ideal),
+    class = "pv_registry"
+  )
 }
 
 #' Generate one noisy variant of an ideal-process trace
@@ -138,4 +154,83 @@ pv_demo_seed_store <- function(path, macroprocess, process, subprocess, ideal, n
     }
   }
   invisible(path)
+}
+
+#' Write synthetic protrace events for a two-app business process (a
+#' drafting app feeding a review/publish app) into two fresh DuckDB
+#' stores, with the draft case's provisional/permanent id link (see
+#' [pv_link_cases()]) always resolved by the time its draft trace ends --
+#' so the review app can log every one of its own events directly under
+#' the permanent `entity_id`, exactly as a real second app would once the
+#' upstream record already exists.
+#' @noRd
+pv_demo_seed_type_curve <- function(draft_path, review_path, ideal_draft, ideal_review, n_cases,
+                                     entity_prefix, draft_users, draft_role_of_user,
+                                     review_users, review_role_of_user, start_date,
+                                     noise_prob, provisional_prob, reject_prob) {
+  pt_draft <- protrace::pt_connect(draft_path, "reservoir_engineering", "Type Curve Construction", "type_curve_module")
+  pt_review <- protrace::pt_connect(review_path, "reservoir_engineering", "Type Curve Construction", "type_curve_review_module")
+  on.exit({
+    protrace::pt_disconnect(pt_draft)
+    protrace::pt_disconnect(pt_review)
+  })
+
+  draft_activity_ids <- ideal_draft$activities$id
+  straight_through_review <- ideal_review$variants[[1]]
+
+  for (i in seq_len(n_cases)) {
+    entity_id <- sprintf("%s-%04d", entity_prefix, i)
+    provisional <- stats::runif(1) < provisional_prob
+    case_id <- if (provisional) protrace::pt_new_case_id() else entity_id
+    linked_yet <- !provisional
+
+    draft_variant <- ideal_draft$variants[[sample(length(ideal_draft$variants), 1)]]
+    draft_trace <- pv_demo_noisy_trace(draft_variant, draft_activity_ids, noise_prob)
+
+    cur_time <- as.POSIXct(paste(start_date + sample(0:84, 1), "08:00:00"), tz = "UTC") +
+      stats::runif(1, 0, 6) * 3600
+    draft_user <- sample(draft_users, 1)
+
+    for (j in seq_along(draft_trace)) {
+      aid <- draft_trace[j]
+      cur_time <- cur_time + stats::runif(1, 5, 90) * 60
+      this_entity <- NA_character_
+      is_last <- j == length(draft_trace)
+      # Force the provisional/permanent link by the trace's last event if
+      # it hasn't happened yet -- the review app below needs a resolved
+      # entity_id from the start, unlike the single-app demo store where
+      # an unresolved "abandoned" provisional case is a legitimate outcome.
+      if (provisional && !linked_yet && (is_last || stats::runif(1) < 0.5)) {
+        this_entity <- entity_id
+        linked_yet <- TRUE
+      } else if (linked_yet) {
+        case_id <- entity_id
+      }
+      protrace::pt_log_event(pt_draft,
+        case_id = case_id, activity_id = aid, session_id = paste0("s_draft_", i),
+        user_id = draft_user, entity_id = this_entity,
+        role = unname(draft_role_of_user[draft_user]), occurred_at = cur_time
+      )
+    }
+
+    rejected <- stats::runif(1) < reject_prob
+    review_trace <- if (rejected) {
+      c("Postulate_For_Review", "Super_User_Review", "Reject_Draft")
+    } else {
+      pv_demo_noisy_trace(straight_through_review, ideal_review$activities$id, noise_prob)
+    }
+
+    cur_time <- cur_time + stats::runif(1, 1, 3) * 86400
+    review_user <- sample(review_users, 1)
+
+    for (aid in review_trace) {
+      cur_time <- cur_time + stats::runif(1, 10, 120) * 60
+      protrace::pt_log_event(pt_review,
+        case_id = entity_id, activity_id = aid, session_id = paste0("s_review_", i),
+        user_id = review_user, entity_id = NA_character_,
+        role = unname(review_role_of_user[review_user]), occurred_at = cur_time
+      )
+    }
+  }
+  invisible(list(draft_path = draft_path, review_path = review_path))
 }

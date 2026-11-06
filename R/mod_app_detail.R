@@ -1,8 +1,47 @@
-#' Deep-dive tab: one process, filtered, in depth
+#' Business processes that have at least one monitored app -- the app
+#' detail tab's own process picker only offers these, since there's
+#' nothing to deep-dive into otherwise.
+#' @noRd
+pv_app_detail_process_choices <- function(registry) {
+  subs <- registry$subprocesses
+  monitored_ids <- unique(subs$process_id[!is.na(subs$duckdb_path)])
+  procs <- registry$processes[registry$processes$process_id %in% monitored_ids, ]
+  stats::setNames(procs$process_id, procs$process)
+}
+
+#' A process's steps that have at least one monitored app.
+#' @noRd
+pv_app_detail_step_choices <- function(registry, process_id) {
+  steps <- registry$steps[registry$steps$process_id == process_id, ]
+  subs <- registry$subprocesses[registry$subprocesses$process_id == process_id, ]
+  monitored_steps <- unique(subs$step[!is.na(subs$duckdb_path)])
+  steps <- steps[steps$step %in% monitored_steps, ]
+  steps <- steps[order(steps$step_order), ]
+  stats::setNames(steps$step, steps$step_label)
+}
+
+#' A step's monitored app(s), within one process.
+#' @noRd
+pv_app_detail_app_choices <- function(registry, process_id, step) {
+  subs <- registry$subprocesses[
+    registry$subprocesses$process_id == process_id &
+      registry$subprocesses$step == step &
+      !is.na(registry$subprocesses$duckdb_path),
+  ]
+  subs <- subs[order(subs$app_order), ]
+  stats::setNames(subs$subprocess, subs$app)
+}
+
+#' App detail tab: one app's own process, filtered, in depth
+#'
+#' The deepest of the three levels: one specific app within one step of
+#' one business process, mined at that app's own activity granularity
+#' (its own `ideal_process` file) -- as opposed to the business detail
+#' tab's step-granularity view across every app in the process.
 #'
 #' @param id module id.
 #' @export
-mod_deepdive_ui <- function(id) {
+mod_app_detail_ui <- function(id) {
   ns <- shiny::NS(id)
   shiny::tagList(
     bslib::card(
@@ -10,9 +49,14 @@ mod_deepdive_ui <- function(id) {
       bslib::card_body(
         style = "padding-bottom: 4px;",
         shiny::fluidRow(
-          shiny::column(4, shiny::selectInput(ns("process_picker"), "Process", choices = NULL, width = "100%")),
+          shiny::column(4, shiny::selectInput(ns("process_picker"), "Business process", choices = NULL, width = "100%")),
+          shiny::column(4, shiny::selectInput(ns("step_picker"), "Step", choices = NULL, width = "100%")),
+          shiny::column(4, shiny::selectInput(ns("app_picker"), "App", choices = NULL, width = "100%"))
+        ),
+        shiny::fluidRow(
           shiny::column(4, shiny::dateRangeInput(ns("date_range"), "Case start date range", width = "100%")),
-          shiny::column(4, shiny::selectizeInput(ns("role_filter"), "Roles", choices = NULL, multiple = TRUE, width = "100%"))
+          shiny::column(4, shiny::selectizeInput(ns("role_filter"), "Roles", choices = NULL, multiple = TRUE, width = "100%")),
+          shiny::column(4, shiny::selectizeInput(ns("user_filter"), "Users", choices = NULL, multiple = TRUE, width = "100%"))
         )
       )
     ),
@@ -33,7 +77,7 @@ mod_deepdive_ui <- function(id) {
       bslib::card_header("Outcomes"),
       shiny::helpText(
         style = "padding: 0 0.95rem;",
-        "How this process actually ended -- a deliverable, one or more named decisions, or (for a case with ",
+        "How this app actually ended -- a deliverable, one or more named decisions, or (for a case with ",
         "none yet) incomplete. Which decision fired is a business result, not a conformance defect: see the ",
         "conformance chart below for whether the right steps were followed to get there."
       ),
@@ -75,42 +119,88 @@ mod_deepdive_ui <- function(id) {
   )
 }
 
-#' Server logic for the deep-dive tab
+#' Server logic for the app detail tab
 #'
 #' @param id module id.
 #' @param pv_con a reactive returning the current [pv_connect_registry()] result.
 #' @param registry a reactive returning the current [pv_load_registry()] result.
-#' @param selected_process a reactive giving a `process_id` to jump to (e.g.
-#'   from [mod_overview_server()]'s "Open deep-dive"), or `NULL`.
+#' @param selected_app a reactive giving `list(process_id, subprocess)` to
+#'   jump to (e.g. from [mod_business_detail_server()]'s "Open app
+#'   detail"), or `NULL`.
 #' @export
-mod_deepdive_server <- function(id, pv_con, registry, selected_process) {
+mod_app_detail_server <- function(id, pv_con, registry, selected_app) {
   shiny::moduleServer(id, function(input, output, session) {
-    process_choices <- shiny::reactive({
-      shiny::req(registry())
-      procs <- registry()$processes[registry()$processes$status == "instrumented", ]
-      stats::setNames(procs$process_id, procs$process)
-    })
+    pending_jump <- shiny::reactiveVal(NULL)
 
     shiny::observe({
-      choices <- process_choices()
+      shiny::req(registry())
+      choices <- pv_app_detail_process_choices(registry())
       shiny::req(length(choices) > 0)
       current <- if (!is.null(input$process_picker) && input$process_picker %in% choices) input$process_picker else choices[1]
       shiny::updateSelectInput(session, "process_picker", choices = choices, selected = current)
     })
 
-    shiny::observeEvent(selected_process(), {
-      shiny::req(selected_process())
-      shiny::updateSelectInput(session, "process_picker", selected = selected_process())
+    shiny::observeEvent(selected_app(), {
+      sel <- selected_app()
+      shiny::req(sel, registry())
+      pending_jump(sel)
+      shiny::updateSelectInput(session, "process_picker",
+        choices = pv_app_detail_process_choices(registry()), selected = sel$process_id
+      )
     })
 
+    shiny::observeEvent(input$process_picker, {
+      shiny::req(registry(), input$process_picker)
+      choices <- pv_app_detail_step_choices(registry(), input$process_picker)
+      shiny::req(length(choices) > 0)
+
+      pj <- pending_jump()
+      target_step <- NULL
+      if (!is.null(pj) && pj$process_id == input$process_picker) {
+        row <- registry()$subprocesses[
+          registry()$subprocesses$process_id == pj$process_id & registry()$subprocesses$subprocess == pj$subprocess,
+        ]
+        if (nrow(row) > 0 && row$step[1] %in% choices) target_step <- row$step[1]
+      }
+      current <- if (!is.null(target_step)) {
+        target_step
+      } else if (!is.null(input$step_picker) && input$step_picker %in% choices) {
+        input$step_picker
+      } else {
+        choices[1]
+      }
+      shiny::updateSelectInput(session, "step_picker", choices = choices, selected = current)
+    }, ignoreNULL = TRUE)
+
+    shiny::observeEvent(input$step_picker, {
+      shiny::req(registry(), input$process_picker, input$step_picker)
+      choices <- pv_app_detail_app_choices(registry(), input$process_picker, input$step_picker)
+      shiny::req(length(choices) > 0)
+
+      pj <- pending_jump()
+      target_app <- NULL
+      if (!is.null(pj) && pj$process_id == input$process_picker && pj$subprocess %in% choices) {
+        target_app <- pj$subprocess
+      }
+      current <- if (!is.null(target_app)) {
+        target_app
+      } else if (!is.null(input$app_picker) && input$app_picker %in% choices) {
+        input$app_picker
+      } else {
+        choices[1]
+      }
+      shiny::updateSelectInput(session, "app_picker", choices = choices, selected = current)
+      pending_jump(NULL)
+    }, ignoreNULL = TRUE)
+
     raw_events <- shiny::reactive({
-      shiny::req(input$process_picker, pv_con(), registry())
-      pv_pull_process_events(pv_con(), registry(), input$process_picker)
+      shiny::req(input$process_picker, input$app_picker, pv_con(), registry())
+      pv_pull_app_events(pv_con(), registry(), input$process_picker, input$app_picker)
     })
 
     ideal_process <- shiny::reactive({
-      shiny::req(input$process_picker, registry())
-      registry()$ideal[[input$process_picker]]
+      shiny::req(input$process_picker, input$app_picker, registry())
+      registry()$ideal[[paste(input$process_picker, input$app_picker, sep = "::")]]
     })
 
     shiny::observeEvent(raw_events(), {
@@ -123,6 +213,9 @@ mod_deepdive_server <- function(id, pv_con, registry, selected_process) {
       shiny::updateSelectizeInput(session, "role_filter",
         choices = sort(unique(stats::na.omit(events$role))), selected = character(0)
       )
+      shiny::updateSelectizeInput(session, "user_filter",
+        choices = sort(unique(stats::na.omit(events$user_id))), selected = character(0)
+      )
     })
 
     filtered_events <- shiny::reactive({
@@ -130,17 +223,17 @@ mod_deepdive_server <- function(id, pv_con, registry, selected_process) {
       shiny::req(input$date_range)
       pv_filter_events(events,
         start_date = input$date_range[1], end_date = input$date_range[2],
-        roles = input$role_filter
+        roles = input$role_filter, users = input$user_filter
       )
     })
 
     kpis <- shiny::reactive(pv_process_kpis(filtered_events(), ideal_process()))
 
     output$no_data_note <- shiny::renderUI({
-      shiny::req(input$process_picker)
+      shiny::req(input$process_picker, input$app_picker)
       if (nrow(raw_events()) == 0) {
         bslib::card(
-          bslib::card_body("No events logged yet for this process.", class = "text-muted")
+          bslib::card_body("No events logged yet for this app.", class = "text-muted")
         )
       }
     })
@@ -156,19 +249,11 @@ mod_deepdive_server <- function(id, pv_con, registry, selected_process) {
     output$outcomes_table <- DT::renderDT({
       shiny::req(ideal_process())
       dist <- pv_outcome_distribution(filtered_events(), ideal_process())
-      shiny::validate(shiny::need(nrow(dist) > 0, "No outcomes declared for this process yet."))
-
-      kind_label <- c(deliverable = "Deliverable", decision = "Decision")
-      tier_label <- c(operational = "Operational", tactical = "Tactical", strategic = "Strategic")
-
-      display <- data.frame(
-        Outcome = dist$label,
-        Kind = vapply(unname(kind_label[dist$kind]), pv_type_badge, character(1)),
-        Tier = vapply(unname(tier_label[dist$tier]), pv_type_badge, character(1)),
-        Cases = vapply(seq_len(nrow(dist)), function(i) pv_cell_bar(as.character(dist$n_cases[i]), dist$pct[i]), character(1)),
-        stringsAsFactors = FALSE
+      shiny::validate(shiny::need(nrow(dist) > 0, "No outcomes declared for this app yet."))
+      DT::datatable(
+        pv_outcomes_display_table(dist),
+        rownames = FALSE, escape = FALSE, options = list(dom = "t"), class = "compact stripe"
       )
-      DT::datatable(display, rownames = FALSE, escape = FALSE, options = list(dom = "t"), class = "compact stripe")
     })
 
     output$process_map <- shiny::renderUI({

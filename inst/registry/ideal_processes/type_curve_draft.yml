@@ -30,15 +30,6 @@ activities:
 - id: Save_Draft
   label: Save / Export Type Curve (Draft)
   role: Reservoir Engineer
-- id: Postulate_For_Review
-  label: Postulate Draft for Review
-  role: Reservoir Engineer
-- id: Super_User_Review
-  label: Super User Review
-  role: Super User
-- id: Publish_Official
-  label: Publish to Type Well Library
-  role: Super User
 variants:
 - - Define_Population_Criteria
   - Query_Analog_Wells
@@ -48,9 +39,6 @@ variants:
   - Fit_Decline_Curve
   - Compare_Existing_Curves
   - Save_Draft
-  - Postulate_For_Review
-  - Super_User_Review
-  - Publish_Official
 - - Define_Population_Criteria
   - Query_Analog_Wells
   - Review_Analog_Statistics
@@ -61,9 +49,6 @@ variants:
   - Fit_Decline_Curve
   - Compare_Existing_Curves
   - Save_Draft
-  - Postulate_For_Review
-  - Super_User_Review
-  - Publish_Official
 - - Define_Population_Criteria
   - Query_Analog_Wells
   - Review_Analog_Statistics
@@ -73,27 +58,9 @@ variants:
   - Adjust_Fitted_Curve
   - Compare_Existing_Curves
   - Save_Draft
-  - Postulate_For_Review
-  - Super_User_Review
-  - Publish_Official
-- - Define_Population_Criteria
-  - Query_Analog_Wells
-  - Review_Analog_Statistics
-  - Normalize_Production_Data
-  - Generate_Aggregate_Curve
-  - Fit_Decline_Curve
-  - Compare_Existing_Curves
-  - Save_Draft
-  - Postulate_For_Review
-  - Super_User_Review
-  - Adjust_Fitted_Curve
-  - Save_Draft
-  - Postulate_For_Review
-  - Super_User_Review
-  - Publish_Official
 outcomes:
-- id: publish_official
-  label: Type curve published (Official)
+- id: draft_saved
+  label: Draft saved, ready for review
   kind: deliverable
-  activity_id: Publish_Official
+  activity_id: Save_Draft
 outcome_exclusivity: single

@@ -47,6 +47,56 @@ pv_pull_process_events <- function(pv_con, registry, process_id) {
   pv_link_cases(events)
 }
 
+#' Pull one app's raw events from its attached DuckDB store
+#'
+#' Like [pv_pull_process_events()], but scoped to exactly one app/step
+#' within a business process rather than unioned across every app the
+#' process spans -- what the app-detail tab needs (one app's own
+#' activity-level trace), as opposed to the business-process-level step
+#' trace [pv_events_at_step_level()] builds from the same union
+#' [pv_pull_process_events()] already returns.
+#'
+#' @param pv_con a [pv_connect_registry()] result.
+#' @param registry the same [pv_load_registry()] result `pv_con` was built
+#'   from (needed for the `macroprocess`/`process` values to filter on).
+#' @param process_id a `process_id` from `registry$processes`.
+#' @param subprocess the app's `subprocess` value, from `registry$subprocesses`.
+#' @return a `data.frame`, the same shape as [pv_pull_process_events()]'s,
+#'   case-linked, scoped to just this one app. Zero rows if this app isn't
+#'   attached.
+#' @export
+pv_pull_app_events <- function(pv_con, registry, process_id, subprocess) {
+  stopifnot(inherits(pv_con, "pv_connection"), inherits(registry, "pv_registry"))
+
+  proc_row <- registry$processes[registry$processes$process_id == process_id, ]
+  if (nrow(proc_row) == 0) {
+    stop("proviz: process_id '", process_id, "' not found in registry", call. = FALSE)
+  }
+
+  subs <- pv_con$subprocesses[
+    pv_con$subprocesses$process_id == process_id &
+      pv_con$subprocesses$subprocess == subprocess &
+      pv_con$subprocesses$attached,
+  ]
+  if (nrow(subs) == 0) {
+    return(pv_empty_events())
+  }
+
+  sql <- sprintf(
+    "SELECT case_id, entity_id, activity_id, occurred_at AS timestamp,
+            user_id, role, session_id, %s AS app, %s AS subprocess
+     FROM %s.protrace_event
+     WHERE macroprocess = %s AND process = %s AND subprocess = %s",
+    DBI::dbQuoteString(pv_con$con, subs$app[1]), DBI::dbQuoteString(pv_con$con, subs$subprocess[1]),
+    DBI::dbQuoteIdentifier(pv_con$con, subs$app[1]),
+    DBI::dbQuoteString(pv_con$con, proc_row$macroprocess), DBI::dbQuoteString(pv_con$con, proc_row$process),
+    DBI::dbQuoteString(pv_con$con, subs$subprocess[1])
+  )
+
+  events <- DBI::dbGetQuery(pv_con$con, sql)
+  pv_link_cases(events)
+}
+
 #' @noRd
 pv_empty_events <- function() {
   data.frame(

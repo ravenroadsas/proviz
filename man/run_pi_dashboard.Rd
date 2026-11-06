@@ -22,8 +22,10 @@ does not return; runs the Shiny app.
 }
 \description{
 Loads the process registry (a real one, or synthetic demo data), attaches
-every instrumented process's DuckDB store (see \code{\link[=pv_connect_registry]{pv_connect_registry()}}),
-and runs the two-tab Shiny dashboard: an overview of every registered
-process with coverage/KPI cards, and a deep-dive tab for exploring one
-process's map, variants, timing, usage, and conformance in detail.
+every instrumented app's DuckDB store (see \code{\link[=pv_connect_registry]{pv_connect_registry()}}), and
+runs the four-tab Shiny dashboard: a portfolio overview of every
+registered business process, a business-process detail tab (its step
+flow and business-level process mining), an app detail tab (one app's
+own activity-level mining), and a users/roles heatmap across the whole
+portfolio.
 }

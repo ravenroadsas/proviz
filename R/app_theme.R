@@ -1,5 +1,5 @@
 ## Single-tone theme: one accent (blue, matching the sequential/primary hue
-## from the palette this app's charts also draw from -- see mod_deepdive.R)
+## from the palette this app's charts also draw from -- see mod_app_detail.R)
 ## carries every interactive/highlight role -- buttons, active nav, KPI
 ## side-bars, chart fills. Status (registry state) is the one reserved
 ## exception: a small fixed palette, shipped as icon+label chips, never
@@ -134,16 +134,37 @@ pv_kpi_box <- function(title, value_output, icon = NULL) {
   not_started = "Not started", deprecated = "Deprecated"
 )
 
-#' A status value as an icon(dot)+label chip -- HTML, for use in a DT column
-#' with `escape = FALSE`.
+#' An icon(dot)+label chip in an arbitrary color -- the shared HTML both
+#' [pv_status_badge()] and [pv_monitored_badge()] render, so the two
+#' reserved-color chip types stay visually identical. For use in a DT
+#' column with `escape = FALSE`.
 #' @noRd
-pv_status_badge <- function(status) {
-  color <- unname(.pv_status_colors[status])
-  label <- unname(.pv_status_labels[status])
+pv_badge_html <- function(color, label) {
   sprintf(
     '<span class="pv-badge" style="background:%s1a;color:%s;"><span class="pv-dot" style="background:%s;"></span>%s</span>',
     color, .pv_ink_secondary, color, label
   )
+}
+
+#' A status value as an icon(dot)+label chip -- HTML, for use in a DT column
+#' with `escape = FALSE`.
+#' @noRd
+pv_status_badge <- function(status) {
+  pv_badge_html(unname(.pv_status_colors[status]), unname(.pv_status_labels[status]))
+}
+
+#' Whether a step/app is monitored -- reuses the registry status palette's
+#' instrumented (green) / not-started (grey) colors, so "is this being
+#' watched" reads with the same color meaning as the registry's own status
+#' chips, rather than a second status palette. HTML, for use in a DT
+#' column with `escape = FALSE`.
+#' @noRd
+pv_monitored_badge <- function(monitored) {
+  if (isTRUE(monitored)) {
+    pv_badge_html(unname(.pv_status_colors[["instrumented"]]), "Monitored")
+  } else {
+    pv_badge_html(unname(.pv_status_colors[["not_started"]]), "Not monitored")
+  }
 }
 
 #' A table cell showing a value alongside a thin proportional bar -- lets a
@@ -164,6 +185,29 @@ pv_cell_bar <- function(value_label, pct) {
   sprintf(
     '<div class="pv-cellbar"><span class="pv-cellbar-value">%s</span><div class="pv-cellbar-track"><div class="pv-cellbar-fill" style="width:%s%%;"></div></div></div>',
     value_label, pct
+  )
+}
+
+#' The outcomes table's display data.frame -- shared between the app
+#' detail and business detail tabs' (identically-shaped) outcomes cards.
+#' `USE.NAMES = FALSE` matters here: `vapply()`'s default naming would
+#' otherwise take an all-`NA` `kind`/`tier` column's own (unnamed, all-NA)
+#' values as the *names* of its result, which `data.frame()` then tries to
+#' use as row names -- erroring ("row names contain missing values") on
+#' any outcome distribution where every row has an NA kind or tier (e.g.
+#' a single declared deliverable, or an "incomplete" row with no other
+#' outcome reached yet).
+#' @param dist a [pv_outcome_distribution()] result.
+#' @noRd
+pv_outcomes_display_table <- function(dist) {
+  kind_label <- c(deliverable = "Deliverable", decision = "Decision")
+  tier_label <- c(operational = "Operational", tactical = "Tactical", strategic = "Strategic")
+  data.frame(
+    Outcome = dist$label,
+    Kind = vapply(unname(kind_label[dist$kind]), pv_type_badge, character(1), USE.NAMES = FALSE),
+    Tier = vapply(unname(tier_label[dist$tier]), pv_type_badge, character(1), USE.NAMES = FALSE),
+    Cases = vapply(seq_len(nrow(dist)), function(i) pv_cell_bar(as.character(dist$n_cases[i]), dist$pct[i]), character(1)),
+    stringsAsFactors = FALSE
   )
 }
 

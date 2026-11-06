@@ -19,10 +19,13 @@ a \code{pv_registry} object, structurally identical to
 \description{
 Writes real DuckDB event stores -- via \code{protrace::pt_connect()}/
 \code{pt_log_event()}, the exact API a real instrumented app uses, not a
-shortcut -- seeded with synthetic cases for the two ideal processes
-migrated from the original PoC, plus two placeholder registry rows in
-other statuses. Exists so \code{run_pi_dashboard(demo = TRUE)} (and this
-package's own screenshots/manual testing) can exercise every panel and
-every registry status without a real shared mount or real application
-data. Not a real organization's process list.
+shortcut -- seeded with synthetic cases for two business processes: a
+\strong{two-app} business process (type curve construction: a drafting app
+and a separate review/publish app, cross-app case-linked, illustrating
+the step/app registry model end to end) and a single-app one (daily
+production surveillance), plus two placeholder registry rows in other
+statuses. Exists so \code{run_pi_dashboard(demo = TRUE)} (and this package's
+own screenshots/manual testing) can exercise every panel and every
+registry status without a real shared mount or real application data.
+Not a real organization's process list.
 }

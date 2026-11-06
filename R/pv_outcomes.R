@@ -133,6 +133,121 @@ pv_outcome_distribution <- function(events, ideal_process) {
   out
 }
 
+#' Business-level outcome distribution for one process
+#'
+#' A business process's overall outcome is the one reached by whichever
+#' app(s) sit in its *final* step (by `step_order`, see
+#' [pv_final_step_apps()]) -- the step order already encodes "last app to
+#' touch the case before it's done", so there's no separate business-level
+#' outcome vocabulary to author: this just pulls that step's app(s)' own
+#' declared outcomes (from each app's own [pv_load_ideal_process()]
+#' `ideal_process` file) and reuses [pv_outcome_distribution()] unchanged,
+#' fed only that final step's events. A step with more than one app pools
+#' all of their events and outcome tables first (two apps can log the same
+#' case under different activity ids without colliding, since outcome ids
+#' are the model's selector, not activity ids directly).
+#'
+#' @param pv_con a [pv_connect_registry()] result.
+#' @param registry a [pv_load_registry()] result.
+#' @param process_id a `process_id` from `registry$processes`.
+#' @param events the final step's own events, already pulled -- pass this
+#'   to reuse a filtered slice (e.g. from [mod_business_detail_server()]'s
+#'   date/role/user filters) instead of an unfiltered re-pull. Defaults to
+#'   pulling every attached final-step app's events fresh.
+#' @return a `data.frame`, same shape as [pv_outcome_distribution()]'s.
+#'   Zero rows if the process has no steps, its final step has no
+#'   attached apps, none of those apps declare an `ideal_process`, or
+#'   `events` is empty.
+#' @export
+pv_business_outcome_distribution <- function(pv_con, registry, process_id, events = NULL) {
+  empty <- data.frame(
+    outcome_id = character(0), label = character(0), kind = character(0),
+    tier = character(0), n_cases = integer(0), pct = numeric(0)
+  )
+
+  final_apps <- pv_final_step_apps(registry, process_id)
+  if (nrow(final_apps) == 0) {
+    return(empty)
+  }
+
+  if (is.null(events)) {
+    events <- do.call(rbind, c(
+      lapply(seq_len(nrow(final_apps)), function(i) {
+        pv_pull_app_events(pv_con, registry, process_id, final_apps$subprocess[i])
+      }),
+      list(pv_empty_events())
+    ))
+  }
+  if (nrow(events) == 0) {
+    return(empty)
+  }
+
+  outcomes <- do.call(rbind, c(
+    lapply(seq_len(nrow(final_apps)), function(i) {
+      ideal <- registry$ideal[[paste(process_id, final_apps$subprocess[i], sep = "::")]]
+      if (is.null(ideal)) NULL else ideal$outcomes
+    }),
+    list(NULL)
+  ))
+  if (is.null(outcomes) || nrow(outcomes) == 0) {
+    return(empty)
+  }
+
+  pv_outcome_distribution(events, structure(list(outcomes = outcomes), class = "pv_ideal_process"))
+}
+
+#' Business process completion rate
+#'
+#' A thin reshaping of [pv_business_outcome_distribution()] into the
+#' single number the portfolio overview wants: what share of this
+#' process's cases (as seen at its final step) have reached *any* named
+#' outcome yet, regardless of which one.
+#'
+#' @param pv_con a [pv_connect_registry()] result.
+#' @param registry a [pv_load_registry()] result.
+#' @param process_id a `process_id` from `registry$processes`.
+#' @return a list: `n_cases` (total distinct cases seen at the final
+#'   step), `n_completed` (reached at least one outcome), `pct` (`NA` if
+#'   `n_cases` is 0).
+#' @export
+pv_process_completion_rate <- function(pv_con, registry, process_id) {
+  dist <- pv_business_outcome_distribution(pv_con, registry, process_id)
+  if (nrow(dist) == 0) {
+    return(list(n_cases = 0L, n_completed = 0L, pct = NA_real_))
+  }
+  n_total <- sum(dist$n_cases)
+  n_incomplete <- sum(dist$n_cases[dist$outcome_id == "incomplete"])
+  n_completed <- n_total - n_incomplete
+  list(
+    n_cases = n_total, n_completed = n_completed,
+    pct = if (n_total == 0) NA_real_ else round(100 * n_completed / n_total, 1)
+  )
+}
+
+#' Portfolio-wide completion rate
+#'
+#' Cases-weighted across every instrumented process -- summing each
+#' process's own case/completion counts before dividing, rather than
+#' averaging per-process percentages, so a process with many cases isn't
+#' drowned out by one with few.
+#'
+#' @param pv_con a [pv_connect_registry()] result.
+#' @param registry a [pv_load_registry()] result.
+#' @return a list: `n_cases`, `n_completed`, `pct` (`NA` if no
+#'   instrumented process has any cases yet).
+#' @export
+pv_portfolio_completion <- function(pv_con, registry) {
+  instrumented_ids <- registry$processes$process_id[registry$processes$status == "instrumented"]
+  rates <- lapply(instrumented_ids, pv_process_completion_rate, pv_con = pv_con, registry = registry)
+
+  n_cases <- sum(vapply(rates, `[[`, numeric(1), "n_cases"))
+  n_completed <- sum(vapply(rates, `[[`, numeric(1), "n_completed"))
+  list(
+    n_cases = n_cases, n_completed = n_completed,
+    pct = if (n_cases == 0) NA_real_ else round(100 * n_completed / n_cases, 1)
+  )
+}
+
 #' Join externally-tracked real-world results onto mined per-case outcomes
 #'
 #' proviz doesn't own or connect to whatever system tracks a decision's

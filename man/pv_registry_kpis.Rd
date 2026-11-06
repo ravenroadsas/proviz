@@ -2,7 +2,7 @@
 % Please edit documentation in R/pv_kpis.R
 \name{pv_registry_kpis}
 \alias{pv_registry_kpis}
-\title{KPI grid for every instrumented process in the registry}
+\title{KPI grid for every instrumented business process in the registry}
 \usage{
 pv_registry_kpis(pv_con, registry)
 }
@@ -13,12 +13,17 @@ pv_registry_kpis(pv_con, registry)
 from.}
 }
 \value{
-\code{registry$processes} with added columns: \code{n_cases}, \code{n_users},
-\code{median_duration_mins}, \code{conformance_median}.
+\code{registry$processes} with added columns: \code{n_steps},
+\code{n_steps_monitored}, \code{steps_pct}, \code{n_cases}, \code{n_users},
+\code{median_duration_mins}, \code{conformance_median}, \code{completion_pct}.
 }
 \description{
-The overview tab's main table: one row per registered process, joined
-with live KPIs for the ones that are actually instrumented (\code{NA} KPI
-columns for \code{designed}/\code{not_started}/\code{deprecated} rows -- there is
-nothing to compute yet).
+The portfolio overview tab's main table: one row per registered
+business process, joined with live business-level KPIs for the ones
+that are actually instrumented (\code{NA} KPI columns for
+\code{designed}/\code{not_started}/\code{deprecated} rows -- there is nothing to
+compute yet). \code{conformance_median} is business-level (step-order)
+conformance, from \code{\link[=pv_business_process_conformance]{pv_business_process_conformance()}} -- not any one
+app's own activity-level conformance, which belongs on the app-detail
+tab instead.
 }

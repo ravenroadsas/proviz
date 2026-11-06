@@ -20,11 +20,22 @@ app_server <- function(initial_registry) {
     })
 
     overview <- mod_overview_server("overview", pv_con = pv_con, registry = registry)
-    mod_deepdive_server("deepdive", pv_con = pv_con, registry = registry, selected_process = overview$selected_process)
+    business_detail <- mod_business_detail_server("business_detail",
+      pv_con = pv_con, registry = registry, selected_process = overview$selected_process
+    )
+    mod_app_detail_server("app_detail",
+      pv_con = pv_con, registry = registry, selected_app = business_detail$selected_app
+    )
+    mod_heatmap_server("heatmap", pv_con = pv_con, registry = registry)
 
     shiny::observeEvent(overview$selected_process(), {
       shiny::req(overview$selected_process())
-      bslib::nav_select("main_nav", "deepdive", session = session)
+      bslib::nav_select("main_nav", "business_detail", session = session)
+    })
+
+    shiny::observeEvent(business_detail$selected_app(), {
+      shiny::req(business_detail$selected_app())
+      bslib::nav_select("main_nav", "app_detail", session = session)
     })
   }
 }
