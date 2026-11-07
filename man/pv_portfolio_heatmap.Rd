@@ -2,29 +2,20 @@
 % Please edit documentation in R/pv_kpis.R
 \name{pv_portfolio_heatmap}
 \alias{pv_portfolio_heatmap}
-\title{User/role activity heatmap across the whole process portfolio}
+\title{User activity heatmap across the whole process portfolio}
 \usage{
-pv_portfolio_heatmap(pv_con, registry, by = c("user", "role"))
+pv_portfolio_heatmap(registry)
 }
 \arguments{
-\item{pv_con}{a \code{\link[=pv_connect_registry]{pv_connect_registry()}} result.}
-
-\item{registry}{the same \code{\link[=pv_load_registry]{pv_load_registry()}} result \code{pv_con} was built
-from.}
-
-\item{by}{\code{"user"} (default) or \code{"role"} -- which dimension to
-cross-tabulate against process.}
+\item{registry}{a \code{\link[=pv_load_registry]{pv_load_registry()}} result.}
 }
 \value{
 a \code{data.frame}, long-form: \code{process_id}, \code{process} (label),
-\code{user_id} or \code{role} (named for \code{by}), \code{n_cases}. Zero rows if no
-instrumented process has any events yet.
+\code{user_id}, \code{n_cases}. Zero rows if no instrumented process has any
+log data yet.
 }
 \description{
-The data behind the hybrid users-and-roles tab: for every instrumented
-process, how many distinct cases did each user (or role) touch -- a
-process x user/role matrix, long-form, ready to hand to a heatmap. Cases
-are counted distinctly per user/role per process (not raw event counts),
-so an app that happens to log many small events per case doesn't make
-its users look busier than they are.
+The data behind the users tab: for every instrumented process, how
+many distinct sessions did each user touch -- a process x user
+matrix, long-form, ready to hand to a heatmap.
 }

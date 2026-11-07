@@ -4,25 +4,20 @@
 \alias{pv_app_weekly_user_scores}
 \title{Each identified user's average weekly engagement score for one app}
 \usage{
-pv_app_weekly_user_scores(pv_con, registry, app)
+pv_app_weekly_user_scores(registry, app)
 }
 \arguments{
-\item{pv_con}{a \code{\link[=pv_connect_registry]{pv_connect_registry()}} result.}
-
 \item{registry}{a \code{\link[=pv_load_registry]{pv_load_registry()}} result.}
 
 \item{app}{an \code{app} value from \code{registry$subprocesses}.}
 }
 \value{
 a \code{data.frame}: \code{user_id}, \code{avg_weekly_score}. Zero rows if this
-app has no events yet.
+app has no log data yet.
 }
 \description{
-Pulls every (process, step) slot this app occupies (an app name can in
-principle appear in more than one business process) and unions their
-scored events -- "average weekly score" is computed only over weeks
-the user was actually active (total score that week), not diluted by
-entirely inactive weeks, so it reads as "how much do they do in a
-typical week they show up", the basis \code{\link[=pv_app_iga]{pv_app_iga()}}'s usage component
-needs.
+"Average weekly score" is computed only over weeks the user was
+actually active (total score that week), not diluted by entirely
+inactive weeks, so it reads as "how much do they do in a typical week
+they show up" -- the basis \code{\link[=pv_app_iga]{pv_app_iga()}}'s usage component needs.
 }

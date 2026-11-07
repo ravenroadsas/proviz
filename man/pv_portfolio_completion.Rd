@@ -4,11 +4,9 @@
 \alias{pv_portfolio_completion}
 \title{Portfolio-wide completion rate}
 \usage{
-pv_portfolio_completion(pv_con, registry)
+pv_portfolio_completion(registry)
 }
 \arguments{
-\item{pv_con}{a \code{\link[=pv_connect_registry]{pv_connect_registry()}} result.}
-
 \item{registry}{a \code{\link[=pv_load_registry]{pv_load_registry()}} result.}
 }
 \value{

@@ -2,21 +2,21 @@
 % Please edit documentation in R/pv_kpis.R
 \name{pv_case_durations}
 \alias{pv_case_durations}
-\title{Per-case throughput time (elapsed time to the next-to-last logged
-action), in minutes}
+\title{Per-session throughput time (elapsed time to the next-to-last logged
+step), in minutes}
 \usage{
-pv_case_durations(events)
+pv_case_durations(log)
 }
 \arguments{
-\item{events}{a case-linked events \code{data.frame}.}
+\item{log}{a \code{\link[=pv_pull_subprocess_log]{pv_pull_subprocess_log()}} result.}
 }
 \value{
-a \code{data.frame}: \code{case_id}, \code{duration_mins}.
+a \code{data.frame}: \code{case_id} (the \code{session_id}), \code{duration_mins}.
 }
 \description{
 A thin wrapper around \code{edeaR::throughput_time()} that returns plain
-numeric minutes -- see the playbook's caveat: this is elapsed time
-across an \emph{eventlog} (single-instant actions), not a measured task
-duration, and its \strong{mean} is fragile for a process with a low-frequency
-long-tail case; prefer the median as the headline KPI.
+numeric minutes -- this is elapsed time across an \emph{eventlog}
+(single-instant actions), not a measured task duration, and its
+\strong{mean} is fragile for a long-tail session; prefer the median as the
+headline KPI.
 }

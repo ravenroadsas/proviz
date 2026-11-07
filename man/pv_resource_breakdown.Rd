@@ -2,18 +2,19 @@
 % Please edit documentation in R/pv_kpis.R
 \name{pv_resource_breakdown}
 \alias{pv_resource_breakdown}
-\title{Per-user workload and role, for the resource-breakdown panel}
+\title{Per-user workload, for the resource-breakdown panel}
 \usage{
-pv_resource_breakdown(events)
+pv_resource_breakdown(log)
 }
 \arguments{
-\item{events}{a case-linked events \code{data.frame}.}
+\item{log}{a \code{\link[=pv_pull_subprocess_log]{pv_pull_subprocess_log()}} result.}
 }
 \value{
-a \code{data.frame}, most-involved first: \code{user_id}, \code{role} (the
-user's most frequent role in this slice), \code{n_cases} (from
-\code{edeaR::resource_involvement()}), \code{pct}.
+a \code{data.frame}, most-involved first: \code{user_id}, \code{n_cases}
+(from \code{edeaR::resource_involvement()}), \code{pct}.
 }
 \description{
-Per-user workload and role, for the resource-breakdown panel
+There is no role column in the real event log (see
+\code{\link[=pv_pull_subprocess_log]{pv_pull_subprocess_log()}}'s fixed shape), so this is by user only --
+a role-based breakdown isn't computable from this log shape.
 }

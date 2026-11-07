@@ -4,11 +4,9 @@
 \alias{pv_app_iga}
 \title{Adoption index (IGA) for one app}
 \usage{
-pv_app_iga(pv_con, registry, app, adoption)
+pv_app_iga(registry, app, adoption)
 }
 \arguments{
-\item{pv_con}{a \code{\link[=pv_connect_registry]{pv_connect_registry()}} result.}
-
 \item{registry}{a \code{\link[=pv_load_registry]{pv_load_registry()}} result.}
 
 \item{app}{an \code{app} value from \code{registry$subprocesses}.}
@@ -23,20 +21,17 @@ a list: \code{pct_trained}, \code{satisfaction}, \code{pct_active}, \code{iga}
 IGA is the equally-weighted average of three components, each a
 percentage of that app's \emph{identified} users (from \code{\link[=pv_load_adoption]{pv_load_adoption()}},
 the admin-maintained denominator -- not just whoever happens to have
-logged an event):
+logged a session):
 \itemize{
 \item \code{pct_trained} -- the share marked \code{trained} in the adoption workbook.
 \item \code{satisfaction} -- the workbook's single app-wide satisfaction
 value, assumed already on the same 0-100 scale as the other two
-components (rescale upstream in the workbook if yours isn't).
+components.
 \item \code{pct_active} -- the share whose average weekly engagement score
 (see \code{\link[=pv_app_weekly_user_scores]{pv_app_weekly_user_scores()}}) exceeds this app's declared
 \code{adoption_threshold} (\code{registry$subprocesses}); a user who never
 touched the app counts as \code{0}, correctly failing the threshold.
 }
-\code{iga} is \code{NA} whenever any component can't be computed (no adoption
-data for this app, or no declared \code{adoption_threshold}) -- a partial
-average would misrepresent an incomplete picture as a complete one;
-the components that \emph{are} available are still returned so the gap is
-visible.
+\code{iga} is \code{NA} whenever any component can't be computed -- a partial
+average would misrepresent an incomplete picture as a complete one.
 }

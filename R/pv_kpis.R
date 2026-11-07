@@ -1,160 +1,115 @@
-#' Filter a process's events to a date range and/or a set of roles/users
-#'
-#' Filters at the **case** level, not the event level: a case is kept or
-#' dropped whole, based on when it started and whether any of its events
-#' were performed by one of `roles`/`users`. Truncating a case's own events
-#' at a date boundary would corrupt every case-level metric that depends on
-#' the full trace (conformance, throughput time, the process map) -- so a
-#' case that started in range keeps all of its events, even ones that spill
-#' past `end_date`.
-#'
-#' @param events a case-linked events `data.frame` (see
-#'   [pv_pull_process_events()]).
-#' @param start_date,end_date `Date` (or coercible), or `NULL` for no
-#'   bound. Compared against each case's first event.
-#' @param roles character vector of roles to keep, or `NULL` for all.
-#' @param users character vector of `user_id`s to keep, or `NULL` for all
-#'   -- the by-user half of the by-user/by-role analysis the three
-#'   detail tabs (and the users-and-roles heatmap) all share.
-#' @return `events`, filtered.
-#' @export
-pv_filter_events <- function(events, start_date = NULL, end_date = NULL, roles = NULL, users = NULL) {
-  stopifnot(is.data.frame(events))
-  if (nrow(events) == 0) {
-    return(events)
-  }
-
-  case_start <- stats::aggregate(timestamp ~ case_id, events, min)
-  keep <- rep(TRUE, nrow(case_start))
-  if (!is.null(start_date)) keep <- keep & as.Date(case_start$timestamp) >= as.Date(start_date)
-  if (!is.null(end_date)) keep <- keep & as.Date(case_start$timestamp) <= as.Date(end_date)
-  keep_ids <- case_start$case_id[keep]
-
-  if (!is.null(roles) && length(roles) > 0) {
-    role_ids <- unique(events$case_id[events$role %in% roles])
-    keep_ids <- intersect(keep_ids, role_ids)
-  }
-  if (!is.null(users) && length(users) > 0) {
-    user_ids <- unique(events$case_id[events$user_id %in% users])
-    keep_ids <- intersect(keep_ids, user_ids)
-  }
-
-  events[events$case_id %in% keep_ids, ]
-}
-
-#' Per-case throughput time (elapsed time to the next-to-last logged
-#' action), in minutes
+#' Per-session throughput time (elapsed time to the next-to-last logged
+#' step), in minutes
 #'
 #' A thin wrapper around `edeaR::throughput_time()` that returns plain
-#' numeric minutes -- see the playbook's caveat: this is elapsed time
-#' across an *eventlog* (single-instant actions), not a measured task
-#' duration, and its **mean** is fragile for a process with a low-frequency
-#' long-tail case; prefer the median as the headline KPI.
-#' @param events a case-linked events `data.frame`.
-#' @return a `data.frame`: `case_id`, `duration_mins`.
+#' numeric minutes -- this is elapsed time across an *eventlog*
+#' (single-instant actions), not a measured task duration, and its
+#' **mean** is fragile for a long-tail session; prefer the median as the
+#' headline KPI.
+#' @param log a [pv_pull_subprocess_log()] result.
+#' @return a `data.frame`: `case_id` (the `session_id`), `duration_mins`.
 #' @export
-pv_case_durations <- function(events) {
-  if (nrow(events) == 0) {
+pv_case_durations <- function(log) {
+  if (nrow(log) == 0) {
     return(data.frame(case_id = character(0), duration_mins = numeric(0)))
   }
-  tt <- edeaR::throughput_time(pv_build_eventlog(events), level = "case", units = "mins")
-  data.frame(case_id = tt$case_id, duration_mins = as.numeric(tt$throughput_time), stringsAsFactors = FALSE)
+  tt <- edeaR::throughput_time(pv_build_eventlog(log), level = "case", units = "mins")
+  data.frame(case_id = tt$session_id, duration_mins = as.numeric(tt$throughput_time), stringsAsFactors = FALSE)
 }
 
-#' Core KPI set for one process (one filtered slice of its events)
+#' Core KPI set for one subprocess's (already filtered) log
 #'
-#' @param events a case-linked, already-filtered events `data.frame` (see
-#'   [pv_filter_events()]).
-#' @param ideal_process a [pv_load_ideal_process()] result, or `NULL` to
-#'   skip the conformance KPI (e.g. a process with no ideal-process
-#'   definition on file yet).
+#' @param log a [pv_pull_subprocess_log()] result (optionally filtered,
+#'   see [pv_filter_log()]).
+#' @param diagram a `$subprocess_diagrams[[key]]` entry (or `NULL` to
+#'   skip the conformance KPI, e.g. a subprocess with no declared steps
+#'   yet).
 #' @return a list: `n_cases`, `n_users`, `median_duration_mins`,
-#'   `mean_duration_mins`, `conformance_median` (`NA` if `ideal_process`
-#'   is `NULL` or there are no cases).
+#'   `mean_duration_mins`, `conformance_median` (`NA` if `diagram` is
+#'   `NULL` or there are no cases).
 #' @export
-pv_process_kpis <- function(events, ideal_process = NULL) {
-  if (nrow(events) == 0) {
+pv_process_kpis <- function(log, diagram = NULL) {
+  if (nrow(log) == 0) {
     return(list(
       n_cases = 0L, n_users = 0L, median_duration_mins = NA_real_,
       mean_duration_mins = NA_real_, conformance_median = NA_real_
     ))
   }
 
-  durations <- pv_case_durations(events)$duration_mins
+  durations <- pv_case_durations(log)$duration_mins
   out <- list(
-    n_cases = length(unique(events$case_id)),
-    n_users = length(unique(events$user_id)),
+    n_cases = length(unique(log$session_id)),
+    n_users = length(unique(log$user_id)),
     median_duration_mins = stats::median(durations, na.rm = TRUE),
     mean_duration_mins = mean(durations, na.rm = TRUE),
     conformance_median = NA_real_
   )
-  if (!is.null(ideal_process)) {
-    conf <- pv_process_conformance(events, ideal_process)
+  if (!is.null(diagram)) {
+    sequences <- pv_session_step_sequences(log)
+    conf <- pv_diagram_conformance(sequences, diagram$edges, "from_step", "to_step")
     out$conformance_median <- stats::median(conf$score, na.rm = TRUE)
   }
   out
 }
 
-#' Cases started per calendar week
-#' @param events a case-linked events `data.frame`.
+#' Sessions started per calendar week
+#' @param log a [pv_pull_subprocess_log()] result.
 #' @return a `data.frame`, ordered by week: `week_start` (`Date`), `n_cases`.
 #' @export
-pv_weekly_usage <- function(events) {
-  if (nrow(events) == 0) {
+pv_weekly_usage <- function(log) {
+  if (nrow(log) == 0) {
     return(data.frame(week_start = as.Date(character(0)), n_cases = integer(0)))
   }
-  case_start <- stats::aggregate(timestamp ~ case_id, events, min)
-  case_start$week_start <- lubridate::floor_date(as.Date(case_start$timestamp), unit = "week")
-  agg <- stats::aggregate(case_id ~ week_start, case_start, length)
-  names(agg)[names(agg) == "case_id"] <- "n_cases"
+  session_start <- stats::aggregate(started_at ~ session_id, log, min)
+  session_start$week_start <- lubridate::floor_date(as.Date(session_start$started_at), unit = "week")
+  agg <- stats::aggregate(session_id ~ week_start, session_start, length)
+  names(agg)[names(agg) == "session_id"] <- "n_cases"
   agg[order(agg$week_start), ]
 }
 
-#' Per-user workload and role, for the resource-breakdown panel
-#' @param events a case-linked events `data.frame`.
-#' @return a `data.frame`, most-involved first: `user_id`, `role` (the
-#'   user's most frequent role in this slice), `n_cases` (from
-#'   `edeaR::resource_involvement()`), `pct`.
+#' Per-user workload, for the resource-breakdown panel
+#'
+#' There is no role column in the real event log (see
+#' [pv_pull_subprocess_log()]'s fixed shape), so this is by user only --
+#' a role-based breakdown isn't computable from this log shape.
+#' @param log a [pv_pull_subprocess_log()] result.
+#' @return a `data.frame`, most-involved first: `user_id`, `n_cases`
+#'   (from `edeaR::resource_involvement()`), `pct`.
 #' @export
-pv_resource_breakdown <- function(events) {
-  if (nrow(events) == 0) {
-    return(data.frame(user_id = character(0), role = character(0), n_cases = integer(0), pct = numeric(0)))
+pv_resource_breakdown <- function(log) {
+  if (nrow(log) == 0) {
+    return(data.frame(user_id = character(0), n_cases = integer(0), pct = numeric(0)))
   }
-  ri <- as.data.frame(edeaR::resource_involvement(pv_build_eventlog(events), level = "resource"))
-  role_lookup <- stats::aggregate(role ~ user_id, events, function(x) names(sort(table(x), decreasing = TRUE))[1])
-
-  out <- merge(ri, role_lookup, by = "user_id", all.x = TRUE)
-  out <- out[order(-out$absolute), ]
+  ri <- as.data.frame(edeaR::resource_involvement(pv_build_eventlog(log), level = "resource"))
+  ri <- ri[order(-ri$absolute), ]
   data.frame(
-    user_id = out$user_id, role = out$role, n_cases = out$absolute,
-    pct = round(100 * out$relative, 1), stringsAsFactors = FALSE, row.names = NULL
+    user_id = ri$user_id, n_cases = ri$absolute,
+    pct = round(100 * ri$relative, 1), stringsAsFactors = FALSE, row.names = NULL
   )
 }
 
-#' Variant (trace) frequency table, with conformance per variant
+#' Variant (step-sequence) frequency table, with conformance per variant
 #'
-#' Groups cases by their exact activity sequence (a "variant"/trace) and
-#' reports how common each is and how well it conforms to the ideal
-#' process -- the view that shows *which* deviations are common enough to
-#' matter, complementing the single conformance-score summary.
-#' @param events a case-linked events `data.frame`.
-#' @param ideal_process a [pv_load_ideal_process()] result.
-#' @return a `data.frame`, most frequent first: `trace` (activity ids
-#'   joined by `" -> "`), `n_cases`, `pct`, `mean_conformance`.
+#' Groups sessions by their exact step sequence and reports how common
+#' each is and how well it conforms to the declared diagram -- the view
+#' that shows *which* deviations are common enough to matter,
+#' complementing the single conformance-score summary.
+#' @param log a [pv_pull_subprocess_log()] result.
+#' @param diagram a `$subprocess_diagrams[[key]]` entry.
+#' @return a `data.frame`, most frequent first: `trace` (step ids joined
+#'   by `" -> "`), `n_cases`, `pct`, `mean_conformance`.
 #' @export
-pv_variant_table <- function(events, ideal_process) {
-  if (nrow(events) == 0) {
+pv_variant_table <- function(log, diagram) {
+  if (nrow(log) == 0) {
     return(data.frame(trace = character(0), n_cases = integer(0), pct = numeric(0), mean_conformance = numeric(0)))
   }
 
-  ordered <- events[order(events$case_id, events$timestamp), ]
-  traces <- split(ordered$activity_id, ordered$case_id)
-  trace_strs <- vapply(traces, paste, collapse = " -> ", FUN.VALUE = character(1))
-
-  conf <- pv_process_conformance(events, ideal_process)
+  sequences <- pv_session_step_sequences(log)
+  trace_strs <- vapply(sequences, paste, collapse = " -> ", FUN.VALUE = character(1))
+  conf <- pv_diagram_conformance(sequences, diagram$edges, "from_step", "to_step")
   conf_by_case <- stats::setNames(conf$score, conf$case_id)
 
-  case_df <- data.frame(case_id = names(traces), trace = trace_strs, stringsAsFactors = FALSE)
+  case_df <- data.frame(case_id = names(sequences), trace = trace_strs, stringsAsFactors = FALSE)
   case_df$conformance <- conf_by_case[case_df$case_id]
 
   n_by_trace <- table(case_df$trace)
@@ -186,65 +141,11 @@ pv_coverage <- function(registry) {
   list(instrumented = instrumented, total = total, pct = if (total == 0) NA_real_ else instrumented / total)
 }
 
-#' Steps monitored, per process and portfolio-wide
-#'
-#' A step counts as monitored if at least one of its apps has a
-#' `duckdb_path` declared (not necessarily live-attached right now --
-#' consistent with how [pv_coverage()] already treats `status` as a
-#' declared signal, not a live-checked one). A step with more than one app
-#' and only some of them instrumented still counts: partial visibility into
-#' a step is better than none, and is itself worth seeing (the per-app
-#' breakdown on the business-process detail tab shows which app(s) still
-#' aren't).
-#'
-#' @param registry a [pv_load_registry()] result.
-#' @return a list: `by_process` (a `data.frame`: `process_id`, `n_steps`,
-#'   `n_steps_monitored`, `pct`), `portfolio` (a list: `n_steps`,
-#'   `n_steps_monitored`, `pct`, totalled across every non-`deprecated`
-#'   process).
-#' @export
-pv_step_coverage <- function(registry) {
-  steps <- registry$steps
-  subs <- registry$subprocesses
-  empty_by_process <- data.frame(
-    process_id = character(0), n_steps = integer(0), n_steps_monitored = integer(0), pct = numeric(0)
-  )
-
-  if (nrow(steps) == 0) {
-    return(list(by_process = empty_by_process, portfolio = list(n_steps = 0L, n_steps_monitored = 0L, pct = NA_real_)))
-  }
-
-  monitored_app <- !is.na(subs$duckdb_path)
-  monitored_step_keys <- unique(paste(subs$process_id[monitored_app], subs$step[monitored_app], sep = "::"))
-  step_key <- paste(steps$process_id, steps$step, sep = "::")
-  steps$monitored <- step_key %in% monitored_step_keys
-
-  by_process <- do.call(rbind, lapply(split(steps, steps$process_id), function(g) {
-    data.frame(
-      process_id = g$process_id[1], n_steps = nrow(g), n_steps_monitored = sum(g$monitored),
-      stringsAsFactors = FALSE
-    )
-  }))
-  rownames(by_process) <- NULL
-  by_process$pct <- round(100 * by_process$n_steps_monitored / by_process$n_steps, 1)
-
-  active_ids <- registry$processes$process_id[registry$processes$status != "deprecated"]
-  active_steps <- steps[steps$process_id %in% active_ids, ]
-  portfolio <- list(
-    n_steps = nrow(active_steps),
-    n_steps_monitored = sum(active_steps$monitored),
-    pct = if (nrow(active_steps) == 0) NA_real_ else round(100 * sum(active_steps$monitored) / nrow(active_steps), 1)
-  )
-
-  list(by_process = by_process, portfolio = portfolio)
-}
-
 #' Apps monitored, per process and portfolio-wide
 #'
-#' The app-level counterpart to [pv_step_coverage()] -- every app counts
-#' individually here (unlike a step, which counts as monitored as soon as
-#' *any* one of its apps is), since "how many of the apps I've scoped are
-#' actually instrumented" is its own, finer-grained coverage signal.
+#' An app counts as monitored if it has a `log_path` declared (not
+#' necessarily reachable right now -- consistent with how [pv_coverage()]
+#' already treats `status` as a declared signal, not a live-checked one).
 #'
 #' @param registry a [pv_load_registry()] result.
 #' @return a list: `by_process` (a `data.frame`: `process_id`, `n_apps`,
@@ -262,7 +163,7 @@ pv_app_coverage <- function(registry) {
     return(list(by_process = empty_by_process, portfolio = list(n_apps = 0L, n_apps_monitored = 0L, pct = NA_real_)))
   }
 
-  subs$monitored <- !is.na(subs$duckdb_path)
+  subs$monitored <- !is.na(subs$log_path)
   by_process <- do.call(rbind, lapply(split(subs, subs$process_id), function(g) {
     data.frame(
       process_id = g$process_id[1], n_apps = nrow(g), n_apps_monitored = sum(g$monitored),
@@ -285,145 +186,110 @@ pv_app_coverage <- function(registry) {
 
 #' Distinct users active in the trailing week
 #'
-#' "Weekly active users" anchored to the most recent event in `events`
-#' (not `Sys.time()`), so this stays meaningful against historical/demo
-#' data too, not only a live system queried in real time.
-#' @param events a case-linked events `data.frame`.
+#' Anchored to the most recent session in `log` (not `Sys.time()`), so
+#' this stays meaningful against historical/demo data too.
+#' @param log a [pv_pull_subprocess_log()] result.
 #' @return a single integer.
 #' @export
-pv_weekly_active_users <- function(events) {
-  if (nrow(events) == 0) {
+pv_weekly_active_users <- function(log) {
+  if (nrow(log) == 0) {
     return(0L)
   }
-  cutoff <- max(events$timestamp) - as.difftime(7, units = "days")
-  length(unique(events$user_id[events$timestamp >= cutoff]))
+  cutoff <- max(log$started_at) - as.difftime(7, units = "days")
+  length(unique(log$user_id[log$started_at >= cutoff]))
 }
 
 #' Portfolio-wide KPIs, across every instrumented business process
 #'
-#' The headline numbers for the portfolio overview tab: how many processes
-#' are registered/instrumented, how much of their declared step map is
-#' actually monitored, and usage/completion totals computed over the
-#' *union* of every instrumented process's events -- not a sum of each
-#' process's own per-process counts, which would double-count a user or
-#' case touching more than one process.
-#'
-#' @param pv_con a [pv_connect_registry()] result.
-#' @param registry the same [pv_load_registry()] result `pv_con` was built
-#'   from.
-#' @return a list: `n_processes`, `n_instrumented`, `n_steps`,
-#'   `n_steps_monitored`, `steps_pct`, `n_apps`, `n_apps_monitored`,
-#'   `apps_pct`, `n_cases`, `n_users`, `n_weekly_users`, `completion_pct`
-#'   (see [pv_portfolio_completion()]).
+#' @param registry a [pv_load_registry()] result.
+#' @return a list: `n_processes`, `n_instrumented`, `n_apps`,
+#'   `n_apps_monitored`, `apps_pct`, `n_cases`, `n_users`,
+#'   `n_weekly_users`, `completion_pct` (see [pv_portfolio_completion()]).
 #' @export
-pv_portfolio_kpis <- function(pv_con, registry) {
+pv_portfolio_kpis <- function(registry) {
   instrumented_ids <- registry$processes$process_id[registry$processes$status == "instrumented"]
-  all_events <- do.call(rbind, c(
-    lapply(instrumented_ids, function(pid) pv_pull_process_events(pv_con, registry, pid)),
-    list(pv_empty_events())
+  all_log <- do.call(rbind, c(
+    lapply(instrumented_ids, function(pid) pv_pull_process_log(registry, pid)),
+    list(cbind(pv_empty_log(), subprocess = character(0)))
   ))
 
   coverage <- pv_coverage(registry)
-  step_cov <- pv_step_coverage(registry)$portfolio
   app_cov <- pv_app_coverage(registry)$portfolio
-  completion <- pv_portfolio_completion(pv_con, registry)
+  completion <- pv_portfolio_completion(registry)
 
   list(
     n_processes = coverage$total, n_instrumented = coverage$instrumented,
-    n_steps = step_cov$n_steps, n_steps_monitored = step_cov$n_steps_monitored, steps_pct = step_cov$pct,
     n_apps = app_cov$n_apps, n_apps_monitored = app_cov$n_apps_monitored, apps_pct = app_cov$pct,
-    n_cases = length(unique(all_events$case_id)), n_users = length(unique(all_events$user_id)),
-    n_weekly_users = pv_weekly_active_users(all_events),
+    n_cases = length(unique(all_log$session_id)), n_users = length(unique(all_log$user_id)),
+    n_weekly_users = pv_weekly_active_users(all_log),
     completion_pct = completion$pct
   )
 }
 
-#' User/role activity heatmap across the whole process portfolio
+#' User activity heatmap across the whole process portfolio
 #'
-#' The data behind the hybrid users-and-roles tab: for every instrumented
-#' process, how many distinct cases did each user (or role) touch -- a
-#' process x user/role matrix, long-form, ready to hand to a heatmap. Cases
-#' are counted distinctly per user/role per process (not raw event counts),
-#' so an app that happens to log many small events per case doesn't make
-#' its users look busier than they are.
+#' The data behind the users tab: for every instrumented process, how
+#' many distinct sessions did each user touch -- a process x user
+#' matrix, long-form, ready to hand to a heatmap.
 #'
-#' @param pv_con a [pv_connect_registry()] result.
-#' @param registry the same [pv_load_registry()] result `pv_con` was built
-#'   from.
-#' @param by `"user"` (default) or `"role"` -- which dimension to
-#'   cross-tabulate against process.
+#' @param registry a [pv_load_registry()] result.
 #' @return a `data.frame`, long-form: `process_id`, `process` (label),
-#'   `user_id` or `role` (named for `by`), `n_cases`. Zero rows if no
-#'   instrumented process has any events yet.
+#'   `user_id`, `n_cases`. Zero rows if no instrumented process has any
+#'   log data yet.
 #' @export
-pv_portfolio_heatmap <- function(pv_con, registry, by = c("user", "role")) {
-  by <- match.arg(by)
-  dim_col <- if (by == "user") "user_id" else "role"
-  empty <- data.frame(process_id = character(0), process = character(0), n_cases = integer(0))
-  empty[[dim_col]] <- character(0)
+pv_portfolio_heatmap <- function(registry) {
+  empty <- data.frame(process_id = character(0), process = character(0), user_id = character(0), n_cases = integer(0))
 
   instrumented_ids <- registry$processes$process_id[registry$processes$status == "instrumented"]
   if (length(instrumented_ids) == 0) {
-    return(empty[, c("process_id", "process", dim_col, "n_cases")])
+    return(empty)
   }
 
   rows <- lapply(instrumented_ids, function(pid) {
-    events <- pv_pull_process_events(pv_con, registry, pid)
-    if (nrow(events) == 0) {
+    log <- pv_pull_process_log(registry, pid)
+    if (nrow(log) == 0) {
       return(NULL)
     }
-    distinct <- unique(events[, c("case_id", dim_col)])
-    tab <- table(distinct[[dim_col]])
+    distinct <- unique(log[, c("session_id", "user_id")])
+    tab <- table(distinct$user_id)
     if (length(tab) == 0) {
       return(NULL)
     }
-    out <- data.frame(process_id = pid, n_cases = as.integer(tab), stringsAsFactors = FALSE)
-    out[[dim_col]] <- names(tab)
-    out
+    data.frame(process_id = pid, user_id = names(tab), n_cases = as.integer(tab), stringsAsFactors = FALSE)
   })
 
   out <- do.call(rbind, c(rows, list(NULL)))
   if (is.null(out) || nrow(out) == 0) {
-    return(empty[, c("process_id", "process", dim_col, "n_cases")])
+    return(empty)
   }
 
   proc_labels <- stats::setNames(registry$processes$process, registry$processes$process_id)
   out$process <- unname(proc_labels[out$process_id])
   rownames(out) <- NULL
-  out[, c("process_id", "process", dim_col, "n_cases")]
+  out[, c("process_id", "process", "user_id", "n_cases")]
 }
 
-#' User/role activity heatmap at app granularity, within a chosen set of
+#' User activity heatmap at app granularity, within a chosen set of
 #' business processes
 #'
-#' The "break down by app" mode behind the users-and-roles heatmap --
+#' The "break down by app" mode behind the users heatmap --
 #' [pv_portfolio_heatmap()]'s one-column-per-process view, one level
-#' finer: a column per monitored app instead, scoped to `process_ids` so
-#' breaking a handful of processes down into their apps doesn't also pull
-#' every other instrumented process's apps.
+#' finer: a column per monitored app instead.
 #'
-#' @param pv_con a [pv_connect_registry()] result.
-#' @param registry the same [pv_load_registry()] result `pv_con` was built
-#'   from.
-#' @param by `"user"` (default) or `"role"`.
+#' @param registry a [pv_load_registry()] result.
 #' @param process_ids character vector of `process_id`s to scope to, or
 #'   `NULL` (default) for every monitored app across the whole portfolio.
 #' @return a `data.frame`, long-form: `process_id`, `process` (label),
-#'   `app`, `subprocess`, `user_id` or `role` (named for `by`), `n_cases`.
-#'   Zero rows if none of the scoped apps has a `duckdb_path` or any
-#'   events yet.
+#'   `app`, `subprocess`, `user_id`, `n_cases`. Zero rows if none of the
+#'   scoped apps has a `log_path` or any log data yet.
 #' @export
-pv_app_heatmap <- function(pv_con, registry, by = c("user", "role"), process_ids = NULL) {
-  by <- match.arg(by)
-  dim_col <- if (by == "user") "user_id" else "role"
+pv_app_heatmap <- function(registry, process_ids = NULL) {
   empty <- data.frame(
     process_id = character(0), process = character(0), app = character(0),
-    subprocess = character(0), n_cases = integer(0)
+    subprocess = character(0), user_id = character(0), n_cases = integer(0)
   )
-  empty[[dim_col]] <- character(0)
-  empty <- empty[, c("process_id", "process", "app", "subprocess", dim_col, "n_cases")]
 
-  subs <- registry$subprocesses[!is.na(registry$subprocesses$duckdb_path), ]
+  subs <- registry$subprocesses[!is.na(registry$subprocesses$log_path), ]
   if (!is.null(process_ids)) {
     subs <- subs[subs$process_id %in% process_ids, ]
   }
@@ -432,21 +298,19 @@ pv_app_heatmap <- function(pv_con, registry, by = c("user", "role"), process_ids
   }
 
   rows <- lapply(seq_len(nrow(subs)), function(i) {
-    events <- pv_pull_app_events(pv_con, registry, subs$process_id[i], subs$subprocess[i])
-    if (nrow(events) == 0) {
+    log <- pv_pull_subprocess_log(registry, subs$process_id[i], subs$subprocess[i])
+    if (nrow(log) == 0) {
       return(NULL)
     }
-    distinct <- unique(events[, c("case_id", dim_col)])
-    tab <- table(distinct[[dim_col]])
+    distinct <- unique(log[, c("session_id", "user_id")])
+    tab <- table(distinct$user_id)
     if (length(tab) == 0) {
       return(NULL)
     }
-    out <- data.frame(
+    data.frame(
       process_id = subs$process_id[i], app = subs$app[i], subprocess = subs$subprocess[i],
-      n_cases = as.integer(tab), stringsAsFactors = FALSE
+      user_id = names(tab), n_cases = as.integer(tab), stringsAsFactors = FALSE
     )
-    out[[dim_col]] <- names(tab)
-    out
   })
 
   out <- do.call(rbind, c(rows, list(NULL)))
@@ -457,38 +321,42 @@ pv_app_heatmap <- function(pv_con, registry, by = c("user", "role"), process_ids
   proc_labels <- stats::setNames(registry$processes$process, registry$processes$process_id)
   out$process <- unname(proc_labels[out$process_id])
   rownames(out) <- NULL
-  out[, c("process_id", "process", "app", "subprocess", dim_col, "n_cases")]
+  out[, c("process_id", "process", "app", "subprocess", "user_id", "n_cases")]
 }
 
 #' KPI grid for every instrumented business process in the registry
 #'
 #' The portfolio overview tab's main table: one row per registered
-#' business process, joined with live business-level KPIs for the ones
-#' that are actually instrumented (`NA` KPI columns for
-#' `designed`/`not_started`/`deprecated` rows -- there is nothing to
-#' compute yet). `conformance_median` is business-level (step-order)
-#' conformance, from [pv_business_process_conformance()] -- not any one
-#' app's own activity-level conformance, which belongs on the app-detail
-#' tab instead.
-#' @param pv_con a [pv_connect_registry()] result.
-#' @param registry the same [pv_load_registry()] result `pv_con` was built
-#'   from.
-#' @return `registry$processes` with added columns: `n_steps`,
-#'   `n_steps_monitored`, `steps_pct`, `n_cases`, `n_users`,
+#' business process, joined with live KPIs for the ones that are
+#' actually instrumented. `conformance_median` is each process's own
+#' subprocesses' step-level conformance medians, averaged -- not a
+#' cross-app business-flow check (this log shape carries no cross-app
+#' case identity to check that against; see
+#' [pv_process_outcome_distribution()]'s docs for the same limitation).
+#'
+#' @param registry a [pv_load_registry()] result.
+#' @return `registry$processes` with added columns: `n_apps`,
+#'   `n_apps_monitored`, `apps_pct`, `n_cases`, `n_users`,
 #'   `median_duration_mins`, `conformance_median`, `completion_pct`.
 #' @export
-pv_registry_kpis <- function(pv_con, registry) {
+pv_registry_kpis <- function(registry) {
   instrumented <- registry$processes[registry$processes$status == "instrumented", ]
-  step_cov <- pv_step_coverage(registry)$by_process
+  app_cov <- pv_app_coverage(registry)$by_process
 
   kpi_rows <- lapply(instrumented$process_id, function(pid) {
-    events <- pv_pull_business_events(pv_con, registry, pid)
-    kpis <- pv_process_kpis(events, pv_step_sequence(registry, pid))
-    completion <- pv_process_completion_rate(pv_con, registry, pid)
+    log <- pv_pull_process_log(registry, pid)
+    subs <- registry$subprocesses[registry$subprocesses$process_id == pid, ]
+    conf_medians <- vapply(subs$subprocess, function(sp) {
+      conf <- pv_subprocess_conformance(registry, pid, sp)
+      if (nrow(conf) == 0) NA_real_ else stats::median(conf$score, na.rm = TRUE)
+    }, numeric(1))
+    completion <- pv_process_completion_rate(registry, pid)
     data.frame(
-      process_id = pid, n_cases = kpis$n_cases, n_users = kpis$n_users,
-      median_duration_mins = kpis$median_duration_mins,
-      conformance_median = kpis$conformance_median,
+      process_id = pid,
+      n_cases = if (nrow(log) == 0) 0L else length(unique(log$session_id)),
+      n_users = if (nrow(log) == 0) 0L else length(unique(log$user_id)),
+      median_duration_mins = if (nrow(log) == 0) NA_real_ else stats::median(pv_case_durations(log)$duration_mins, na.rm = TRUE),
+      conformance_median = if (length(conf_medians) == 0 || all(is.na(conf_medians))) NA_real_ else mean(conf_medians, na.rm = TRUE),
       completion_pct = completion$pct, stringsAsFactors = FALSE
     )
   })
@@ -503,7 +371,7 @@ pv_registry_kpis <- function(pv_con, registry) {
   }
 
   out <- merge(registry$processes, kpis, by = "process_id", all.x = TRUE)
-  out <- merge(out, step_cov[, c("process_id", "n_steps", "n_steps_monitored", "pct")], by = "process_id", all.x = TRUE)
-  names(out)[names(out) == "pct"] <- "steps_pct"
+  out <- merge(out, app_cov[, c("process_id", "n_apps", "n_apps_monitored", "pct")], by = "process_id", all.x = TRUE)
+  names(out)[names(out) == "pct"] <- "apps_pct"
   out
 }

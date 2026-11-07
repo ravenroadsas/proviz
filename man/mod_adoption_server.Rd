@@ -4,17 +4,18 @@
 \alias{mod_adoption_server}
 \title{Server logic for the adoption tab}
 \usage{
-mod_adoption_server(id, pv_con, registry, adoption)
+mod_adoption_server(id, registry, adoption, refresh = shiny::reactive(NULL))
 }
 \arguments{
 \item{id}{module id.}
-
-\item{pv_con}{a reactive returning the current \code{\link[=pv_connect_registry]{pv_connect_registry()}} result.}
 
 \item{registry}{a reactive returning the current \code{\link[=pv_load_registry]{pv_load_registry()}} result.}
 
 \item{adoption}{a reactive returning the current \code{\link[=pv_load_adoption]{pv_load_adoption()}} result,
 or \code{NULL} if no \code{adoption_source} is configured or it failed to load.}
+
+\item{refresh}{a reactive (any value) bumped whenever logs should be
+re-read.}
 }
 \description{
 Server logic for the adoption tab

@@ -2,24 +2,22 @@
 % Please edit documentation in R/pv_correlations.R
 \name{pv_app_case_score_conformance}
 \alias{pv_app_case_score_conformance}
-\title{Per-case score and conformance for one app, pooled across every
+\title{Per-session score and conformance for one app, pooled across every
 (process, subprocess) slot it occupies}
 \usage{
-pv_app_case_score_conformance(pv_con, registry, app)
+pv_app_case_score_conformance(registry, app)
 }
 \arguments{
-\item{pv_con}{a \code{\link[=pv_connect_registry]{pv_connect_registry()}} result.}
-
 \item{registry}{a \code{\link[=pv_load_registry]{pv_load_registry()}} result.}
 
 \item{app}{an \code{app} value from \code{registry$subprocesses}.}
 }
 \value{
 a \code{data.frame}: \code{case_id}, \code{user_id} (primary user), \code{total_score},
-\code{conformance}. Zero rows if this app has no events or no declared
-\code{ideal_process} anywhere it's scoped.
+\code{conformance}. Zero rows if this app has no log data or no declared
+step diagram anywhere it's scoped.
 }
 \description{
-Per-case score and conformance for one app, pooled across every
+Per-session score and conformance for one app, pooled across every
 (process, subprocess) slot it occupies
 }

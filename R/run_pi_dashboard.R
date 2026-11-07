@@ -1,14 +1,14 @@
 #' Launch the process intelligence dashboard
 #'
-#' Loads the process registry (a real one, or synthetic demo data), attaches
-#' every instrumented app's DuckDB store (see [pv_connect_registry()]), and
-#' runs the five-tab Shiny dashboard: a portfolio overview of every
-#' registered business process, a business-process detail tab (its step
-#' flow and business-level process mining), an app detail tab (one app's
-#' own activity-level mining), a users/roles heatmap (plus per-user/app
-#' engagement-score correlations) across the whole portfolio, and an
-#' adoption tab (the IGA index per app, from the registry's
-#' `adoption_source` workbook -- see [pv_load_adoption()]).
+#' Loads the process registry (a real one, or synthetic demo data) and
+#' runs the five-tab Shiny dashboard, reading each app's own event log
+#' straight from its `log_path` (see [pv_pull_subprocess_log()]): a
+#' portfolio overview of every registered business process, a
+#' business-process detail tab (the apps that make it up, rolled up), an
+#' app detail tab (one app's own step-level mining), a users heatmap
+#' (plus per-user/app engagement-score correlations) across the whole
+#' portfolio, and an adoption tab (the IGA index per app, from the
+#' registry's `adoption_source` workbook -- see [pv_load_adoption()]).
 #'
 #' @param registry_path path to a registry DuckDB file (see
 #'   [pv_load_registry()]). Ignored if `demo = TRUE`. Defaults to the

@@ -17,95 +17,94 @@ pv_safe_cor <- function(x, y, min_n = 3) {
 
 #' Correlation between engagement score and time, per user or app-wide
 #'
-#' Buckets scores into weeks and correlates the week's ordinal position
-#' against that week's total score -- a positive `r` means engagement is
-#' trending up over the observed period, negative means it's tailing off.
+#' Buckets `total_weight` into weeks and correlates the week's ordinal
+#' position against that week's total score -- a positive `r` means
+#' engagement is trending up over the observed period, negative means
+#' it's tailing off.
 #'
-#' @param scored_events a [pv_score_events()] result (or any events
-#'   `data.frame` with `timestamp`, `user_id`, `score` columns).
+#' @param log a [pv_pull_subprocess_log()] result.
 #' @param by `"user"` (default, one row per user) or `"app"` (a single
 #'   pooled value across every user).
 #' @return for `by = "user"`: a `data.frame`, most-observed first:
 #'   `user_id`, `r` (`NA` if fewer than 3 distinct weeks), `n_weeks`.
 #'   For `by = "app"`: a list `list(r, n_weeks)`.
 #' @export
-pv_score_time_trend <- function(scored_events, by = c("user", "app")) {
+pv_score_time_trend <- function(log, by = c("user", "app")) {
   by <- match.arg(by)
-  if (nrow(scored_events) == 0) {
+  if (nrow(log) == 0) {
     return(if (by == "app") list(r = NA_real_, n_weeks = 0L) else data.frame(user_id = character(0), r = numeric(0), n_weeks = integer(0)))
   }
 
-  weeks <- lubridate::floor_date(as.Date(scored_events$timestamp), unit = "week")
+  weeks <- lubridate::floor_date(as.Date(log$started_at), unit = "week")
   week_index <- as.numeric(weeks - min(weeks)) / 7 + 1
 
   if (by == "app") {
-    weekly <- stats::aggregate(scored_events$score, by = list(week_index), sum)
+    weekly <- stats::aggregate(log$total_weight, by = list(week_index), sum)
     return(list(r = pv_safe_cor(weekly$Group.1, weekly$x), n_weeks = nrow(weekly)))
   }
 
   weekly <- stats::aggregate(
-    score ~ user_id + week_index,
-    data.frame(user_id = scored_events$user_id, week_index = week_index, score = scored_events$score),
+    total_weight ~ user_id + week_index,
+    data.frame(user_id = log$user_id, week_index = week_index, total_weight = log$total_weight),
     sum
   )
   rows <- lapply(split(weekly, weekly$user_id), function(g) {
-    data.frame(user_id = g$user_id[1], r = pv_safe_cor(g$week_index, g$score), n_weeks = nrow(g), stringsAsFactors = FALSE)
+    data.frame(user_id = g$user_id[1], r = pv_safe_cor(g$week_index, g$total_weight), n_weeks = nrow(g), stringsAsFactors = FALSE)
   })
   out <- do.call(rbind, rows)
   rownames(out) <- NULL
   out[order(-out$n_weeks), ]
 }
 
-#' Per-case engagement score, conformance, and primary user -- the shared
-#' basis for [pv_score_compliance_correlation()]
+#' Per-session engagement score, conformance, and primary user -- the
+#' shared basis for [pv_score_compliance_correlation()]
 #' @noRd
-pv_case_score_conformance_table <- function(events, scored_events, ideal_process) {
+pv_case_score_conformance_table <- function(log, diagram) {
   empty <- data.frame(case_id = character(0), user_id = character(0), total_score = numeric(0), conformance = numeric(0))
-  if (nrow(events) == 0) {
+  if (nrow(log) == 0) {
     return(empty)
   }
 
-  # A case's "primary user" is whoever logged the most of its events --
-  # a case can span more than one user, but the per-user correlation
-  # needs exactly one owner per case to group by.
+  # A session's "primary user" is whoever logged the most of its rows --
+  # a session should in practice have exactly one user, but this stays
+  # defensive rather than assuming it.
   primary_user <- stats::aggregate(
-    user_id ~ case_id, events,
+    user_id ~ session_id, log,
     function(u) names(sort(table(u), decreasing = TRUE))[1]
   )
 
-  case_score <- stats::aggregate(score ~ case_id, scored_events, sum)
-  names(case_score) <- c("case_id", "total_score")
+  case_score <- stats::aggregate(total_weight ~ session_id, log, sum)
+  names(case_score) <- c("session_id", "total_score")
 
-  conf <- pv_process_conformance(events, ideal_process)[, c("case_id", "score")]
-  names(conf) <- c("case_id", "conformance")
+  sequences <- pv_session_step_sequences(log)
+  conf <- pv_diagram_conformance(sequences, diagram$edges, "from_step", "to_step")
 
-  out <- merge(primary_user, case_score, by = "case_id")
-  out <- merge(out, conf, by = "case_id")
+  out <- merge(primary_user, case_score, by = "session_id")
+  out <- merge(out, conf[, c("case_id", "score")], by.x = "session_id", by.y = "case_id")
+  names(out)[names(out) == "session_id"] <- "case_id"
+  names(out)[names(out) == "score"] <- "conformance"
   out
 }
 
-#' Correlation between a case's engagement score and its conformance,
+#' Correlation between a session's engagement score and its conformance,
 #' per user or app-wide
 #'
-#' Whether more-engaged (higher-scoring) cases also tend to follow the
-#' ideal process more closely -- a business question distinct from
-#' either metric alone: a user can click a lot without doing the right
-#' things, or conform perfectly with minimal engagement.
+#' Whether more-engaged (higher-scoring) sessions also tend to follow the
+#' declared step diagram more closely -- a business question distinct
+#' from either metric alone: a user can click a lot without doing the
+#' right things, or conform perfectly with minimal engagement.
 #'
-#' @param events a case-linked events `data.frame` (e.g.
-#'   [pv_pull_process_events()]/[pv_pull_app_events()]'s result).
-#' @param scored_events the same events, scored (see [pv_score_events()]).
-#' @param ideal_process a [pv_load_ideal_process()] result (or
-#'   [pv_step_sequence()]'s, for a business-level correlation).
+#' @param log a [pv_pull_subprocess_log()] result.
+#' @param diagram a `$subprocess_diagrams[[key]]` entry.
 #' @param by `"user"` (default, one row per user) or `"app"` (a single
-#'   pooled value across every case).
+#'   pooled value across every session).
 #' @return for `by = "user"`: a `data.frame`, most-cases first: `user_id`,
 #'   `r` (`NA` if fewer than 3 of that user's cases), `n_cases`. For
 #'   `by = "app"`: a list `list(r, n_cases)`.
 #' @export
-pv_score_compliance_correlation <- function(events, scored_events, ideal_process, by = c("user", "app")) {
+pv_score_compliance_correlation <- function(log, diagram, by = c("user", "app")) {
   by <- match.arg(by)
-  tab <- pv_case_score_conformance_table(events, scored_events, ideal_process)
+  tab <- pv_case_score_conformance_table(log, diagram)
   pv_correlate_case_table(tab, by)
 }
 
@@ -129,67 +128,51 @@ pv_correlate_case_table <- function(tab, by = c("user", "app")) {
   out[order(-out$n_cases), ]
 }
 
-#' This app's events, scored against each matching subprocess's own
-#' `ideal_process` -- the raw basis for the People tab's per-app score
-#' correlations (an app can in principle occupy more than one
-#' process/step slot, each with its own activities/score table).
+#' This app's log, unioned across every (process, subprocess) slot it
+#' occupies (an app can in principle occupy more than one slot).
 #'
-#' @param pv_con a [pv_connect_registry()] result.
 #' @param registry a [pv_load_registry()] result.
 #' @param app an `app` value from `registry$subprocesses`.
-#' @return a case-linked, scored events `data.frame` (adds `score` to
-#'   [pv_pull_app_events()]'s shape), unioned across every monitored
-#'   (process, subprocess) slot this app occupies. Zero rows if none has
-#'   any events yet.
+#' @return a [pv_pull_subprocess_log()]-shaped `data.frame` plus
+#'   `process_id`/`subprocess`, unioned across every slot. Zero rows if
+#'   none has any log data yet.
 #' @export
-pv_app_scored_events <- function(pv_con, registry, app) {
-  subs <- registry$subprocesses[registry$subprocesses$app == app & !is.na(registry$subprocesses$duckdb_path), ]
+pv_app_log <- function(registry, app) {
+  subs <- registry$subprocesses[registry$subprocesses$app == app & !is.na(registry$subprocesses$log_path), ]
   rows <- lapply(seq_len(nrow(subs)), function(i) {
-    events <- pv_pull_app_events(pv_con, registry, subs$process_id[i], subs$subprocess[i])
-    if (nrow(events) == 0) {
+    log <- pv_pull_subprocess_log(registry, subs$process_id[i], subs$subprocess[i])
+    if (nrow(log) == 0) {
       return(NULL)
     }
-    ideal <- registry$ideal[[paste(subs$process_id[i], subs$subprocess[i], sep = "::")]]
-    score_by_activity <- if (is.null(ideal)) NULL else stats::setNames(ideal$activities$score, ideal$activities$id)
-    events$score <- if (is.null(score_by_activity)) 0 else unname(score_by_activity[events$activity_id])
-    events$score[is.na(events$score)] <- 0
-    events
+    log$process_id <- subs$process_id[i]
+    log$subprocess <- subs$subprocess[i]
+    log
   })
   out <- do.call(rbind, c(rows, list(NULL)))
   if (is.null(out)) {
-    out <- data.frame(
-      case_id = character(0), entity_id = character(0), activity_id = character(0),
-      timestamp = as.POSIXct(character(0)), user_id = character(0), role = character(0),
-      session_id = character(0), app = character(0), subprocess = character(0), score = numeric(0),
-      stringsAsFactors = FALSE
-    )
+    out <- cbind(pv_empty_log(), process_id = character(0), subprocess = character(0))
   }
   out
 }
 
-#' Per-case score and conformance for one app, pooled across every
+#' Per-session score and conformance for one app, pooled across every
 #' (process, subprocess) slot it occupies
 #'
-#' @param pv_con a [pv_connect_registry()] result.
 #' @param registry a [pv_load_registry()] result.
 #' @param app an `app` value from `registry$subprocesses`.
 #' @return a `data.frame`: `case_id`, `user_id` (primary user), `total_score`,
-#'   `conformance`. Zero rows if this app has no events or no declared
-#'   `ideal_process` anywhere it's scoped.
+#'   `conformance`. Zero rows if this app has no log data or no declared
+#'   step diagram anywhere it's scoped.
 #' @export
-pv_app_case_score_conformance <- function(pv_con, registry, app) {
-  subs <- registry$subprocesses[registry$subprocesses$app == app & !is.na(registry$subprocesses$duckdb_path), ]
+pv_app_case_score_conformance <- function(registry, app) {
+  subs <- registry$subprocesses[registry$subprocesses$app == app & !is.na(registry$subprocesses$log_path), ]
   tabs <- lapply(seq_len(nrow(subs)), function(i) {
-    events <- pv_pull_app_events(pv_con, registry, subs$process_id[i], subs$subprocess[i])
-    ideal <- registry$ideal[[paste(subs$process_id[i], subs$subprocess[i], sep = "::")]]
-    if (nrow(events) == 0 || is.null(ideal)) {
+    log <- pv_pull_subprocess_log(registry, subs$process_id[i], subs$subprocess[i])
+    diagram <- registry$subprocess_diagrams[[paste(subs$process_id[i], subs$subprocess[i], sep = "::")]]
+    if (nrow(log) == 0 || is.null(diagram)) {
       return(NULL)
     }
-    score_by_activity <- stats::setNames(ideal$activities$score, ideal$activities$id)
-    scored <- events
-    scored$score <- unname(score_by_activity[scored$activity_id])
-    scored$score[is.na(scored$score)] <- 0
-    pv_case_score_conformance_table(events, scored, ideal)
+    pv_case_score_conformance_table(log, diagram)
   })
   out <- do.call(rbind, c(tabs, list(NULL)))
   if (is.null(out)) {
@@ -198,53 +181,47 @@ pv_app_case_score_conformance <- function(pv_con, registry, app) {
   out
 }
 
-#' Correlation between a case's engagement score and its conformance,
+#' Correlation between a session's engagement score and its conformance,
 #' for one app, pooled across every (process, subprocess) slot it occupies
 #'
 #' The app-centric counterpart to [pv_score_compliance_correlation()] --
 #' built for the People tab's app picker, where the caller only has an
-#' `app` name, not a single `events`/`ideal_process` pair to hand in.
+#' `app` name, not a single `log`/`diagram` pair to hand in.
 #'
-#' @param pv_con a [pv_connect_registry()] result.
 #' @param registry a [pv_load_registry()] result.
 #' @param app an `app` value from `registry$subprocesses`.
 #' @param by `"user"` (default) or `"app"` (see [pv_score_compliance_correlation()]).
 #' @return same shape as [pv_score_compliance_correlation()]'s.
 #' @export
-pv_app_score_compliance_correlation <- function(pv_con, registry, app, by = c("user", "app")) {
+pv_app_score_compliance_correlation <- function(registry, app, by = c("user", "app")) {
   by <- match.arg(by)
-  pv_correlate_case_table(pv_app_case_score_conformance(pv_con, registry, app), by)
+  pv_correlate_case_table(pv_app_case_score_conformance(registry, app), by)
 }
 
-#' Correlation between adoption (IGA) and overall process conformance,
+#' Correlation between adoption (IGA) and overall step conformance,
 #' across apps
 #'
-#' One point per app: its IGA against its mean case conformance (against
-#' that app's own `ideal_process`) -- do better-adopted apps also see
-#' their process followed more faithfully? Needs at least 3 apps with
-#' both an IGA and a conformance figure to return a meaningful `r`.
+#' One point per app: its IGA against its mean session conformance
+#' (against that app's own declared step diagram) -- do better-adopted
+#' apps also see their steps followed more faithfully? Needs at least 3
+#' apps with both an IGA and a conformance figure to return a meaningful
+#' `r`.
 #'
-#' @param pv_con a [pv_connect_registry()] result.
 #' @param registry a [pv_load_registry()] result.
 #' @param adoption a [pv_load_adoption()] result.
 #' @return a list: `data` (a `data.frame`: `app`, `iga`, `mean_conformance`
 #'   -- the scatter's points, apps with either value missing excluded),
 #'   `r` (`NA` if fewer than 3 points).
 #' @export
-pv_iga_compliance_correlation <- function(pv_con, registry, adoption) {
-  iga_tab <- pv_portfolio_iga(pv_con, registry, adoption)
-  subs <- registry$subprocesses[!is.na(registry$subprocesses$duckdb_path), ]
+pv_iga_compliance_correlation <- function(registry, adoption) {
+  iga_tab <- pv_portfolio_iga(registry, adoption)
+  subs <- registry$subprocesses[!is.na(registry$subprocesses$log_path), ]
 
   rows <- lapply(unique(subs$app), function(app) {
     app_subs <- subs[subs$app == app, ]
     confs <- do.call(rbind, c(
       lapply(seq_len(nrow(app_subs)), function(i) {
-        events <- pv_pull_app_events(pv_con, registry, app_subs$process_id[i], app_subs$subprocess[i])
-        ideal <- registry$ideal[[paste(app_subs$process_id[i], app_subs$subprocess[i], sep = "::")]]
-        if (nrow(events) == 0 || is.null(ideal)) {
-          return(NULL)
-        }
-        pv_process_conformance(events, ideal)
+        pv_subprocess_conformance(registry, app_subs$process_id[i], app_subs$subprocess[i])
       }),
       list(NULL)
     ))

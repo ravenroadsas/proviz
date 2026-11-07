@@ -2,14 +2,12 @@
 % Please edit documentation in R/pv_correlations.R
 \name{pv_iga_compliance_correlation}
 \alias{pv_iga_compliance_correlation}
-\title{Correlation between adoption (IGA) and overall process conformance,
+\title{Correlation between adoption (IGA) and overall step conformance,
 across apps}
 \usage{
-pv_iga_compliance_correlation(pv_con, registry, adoption)
+pv_iga_compliance_correlation(registry, adoption)
 }
 \arguments{
-\item{pv_con}{a \code{\link[=pv_connect_registry]{pv_connect_registry()}} result.}
-
 \item{registry}{a \code{\link[=pv_load_registry]{pv_load_registry()}} result.}
 
 \item{adoption}{a \code{\link[=pv_load_adoption]{pv_load_adoption()}} result.}
@@ -20,8 +18,9 @@ a list: \code{data} (a \code{data.frame}: \code{app}, \code{iga}, \code{mean_con
 \code{r} (\code{NA} if fewer than 3 points).
 }
 \description{
-One point per app: its IGA against its mean case conformance (against
-that app's own \code{ideal_process}) -- do better-adopted apps also see
-their process followed more faithfully? Needs at least 3 apps with
-both an IGA and a conformance figure to return a meaningful \code{r}.
+One point per app: its IGA against its mean session conformance
+(against that app's own declared step diagram) -- do better-adopted
+apps also see their steps followed more faithfully? Needs at least 3
+apps with both an IGA and a conformance figure to return a meaningful
+\code{r}.
 }

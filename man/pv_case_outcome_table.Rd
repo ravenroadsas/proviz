@@ -4,20 +4,19 @@
 \alias{pv_case_outcome_table}
 \title{Per-case outcome table}
 \usage{
-pv_case_outcome_table(events, ideal_process)
+pv_case_outcome_table(traces, outcomes, node_col = "step_id")
 }
 \arguments{
-\item{events}{a case-linked events \code{data.frame} (\code{case_id},
-\code{activity_id}, \code{timestamp}).}
+\item{traces}{a named list of character vectors (e.g.
+\code{\link[=pv_session_step_sequences]{pv_session_step_sequences()}}'s result), keyed by case/session id.}
 
-\item{ideal_process}{a \code{\link[=pv_load_ideal_process]{pv_load_ideal_process()}} result.}
+\item{outcomes, node_col}{see \code{\link[=pv_case_outcome]{pv_case_outcome()}}.}
 }
 \value{
-a \code{data.frame}, one row per case: \code{case_id}, \code{outcome_ids}
-(comma-joined; \code{""} if none), \code{status} (\code{"completed"}/\code{"incomplete"}).
+a \code{data.frame}, one row per entry in \code{traces}: \code{case_id},
+\code{outcome_ids} (comma-joined; \code{""} if none), \code{status}
+(\code{"completed"}/\code{"incomplete"}).
 }
 \description{
-The per-case view behind \code{\link[=pv_outcome_distribution]{pv_outcome_distribution()}}'s aggregate, and
-the natural left-hand side for \code{\link[=pv_join_external_outcomes]{pv_join_external_outcomes()}} -- one row
-per case, ready to attach a real-world result to.
+Per-case outcome table
 }

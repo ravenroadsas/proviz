@@ -2,10 +2,10 @@
 % Please edit documentation in R/mod_heatmap.R
 \name{mod_heatmap_ui}
 \alias{mod_heatmap_ui}
-\title{Users & roles tab: a heatmap of activity across the whole process
-portfolio -- the hybrid approach to by-user/by-role analysis (filters
-on the business/app detail tabs cover the per-process case; this tab
-is the portfolio-wide, side-by-side view those filters can't give).}
+\title{Users tab: a heatmap of activity across the whole process portfolio --
+the portfolio-wide, side-by-side view the business/app detail tabs'
+own filters can't give. There is no role dimension here: the real
+event log (see \code{\link[=pv_pull_subprocess_log]{pv_pull_subprocess_log()}}) carries no role column.}
 \usage{
 mod_heatmap_ui(id)
 }
@@ -13,8 +13,8 @@ mod_heatmap_ui(id)
 \item{id}{module id.}
 }
 \description{
-Users & roles tab: a heatmap of activity across the whole process
-portfolio -- the hybrid approach to by-user/by-role analysis (filters
-on the business/app detail tabs cover the per-process case; this tab
-is the portfolio-wide, side-by-side view those filters can't give).
+Users tab: a heatmap of activity across the whole process portfolio --
+the portfolio-wide, side-by-side view the business/app detail tabs'
+own filters can't give. There is no role dimension here: the real
+event log (see \code{\link[=pv_pull_subprocess_log]{pv_pull_subprocess_log()}}) carries no role column.
 }

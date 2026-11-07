@@ -1,32 +1,36 @@
 #' Create the registry's DuckDB schema
 #'
-#' The registry used to be a hand-authored YAML file; it is now a local
-#' DuckDB database so a companion editor app (see the forthcoming
-#' `run_registry_editor()`) can read and write it a row at a time instead
-#' of rewriting the whole file. The schema normalizes what the YAML held
-#' into relational tables, keyed to mirror the YAML's own nesting:
-#' `subprocesses` under a process, `activities`/`variant_steps`/`outcomes`
-#' under an app's ideal process (`ideal_processes`, one row per
-#' `(process_id, subprocess)`), `step_variants` under a process, and a
-#' flat `settings` table for registry-wide values (currently just
-#' `adoption_source`).
+#' The registry models four things (see the package's process-mining
+#' glossary):
+#' \enumerate{
+#'   \item **Registry** -- `processes`, `subprocesses` (one app each,
+#'     1:1): who owns what, its status, and where to find its app
+#'     (`app_link`) and its event log (`log_path`).
+#'   \item **Ideal diagrams** -- a graph (nodes + directed edges, cycles
+#'     allowed -- no enumerated "variants") plus named outcomes, at two
+#'     levels: the *process* level, where the nodes are its subprocesses
+#'     (`process_edges`/`process_outcomes`), and the *subprocess* level,
+#'     where the nodes are that one app's own `steps`
+#'     (`steps`/`step_edges`/`subprocess_outcomes`).
+#'   \item **Click map** -- `clicks`: a concrete UI binding
+#'     (selector/kind/feature/event) plus a weight, many-to-one onto a
+#'     step. This is what a future telemetry-config export would be
+#'     built from; it is not consulted when reading a real event log,
+#'     which already arrives with its weight totals pre-computed.
+#' }
+#' The fourth artifact, the actual log records, is never stored here --
+#' see [pv_pull_subprocess_log()], which reads it straight from each
+#' subprocess's `log_path`.
 #'
-#' `activities` carries five columns (`selector`, `kind`, `feature`,
-#' `event`, `weight`) that the current hand-modeled ideal processes leave
-#' `NULL` -- they exist for the scan-and-curate workflow the editor app
-#' will drive, where each activity is mapped to a concrete UI hook
-#' instead of only declared by id/label/role/score.
+#' Enforces `PRIMARY KEY`/`CHECK` constraints but deliberately not
+#' `FOREIGN KEY` ones: DuckDB allocates a fixed-size index segment per
+#' constraint regardless of row count, which inflates a small registry
+#' to several MB for no benefit here. Referential integrity is this
+#' package's write-helpers' job (see e.g. [pv_registry_db_insert_step_edge()]'s
+#' validation), not the schema's.
 #'
 #' Idempotent -- `CREATE TABLE IF NOT EXISTS`, safe to call against an
 #' already-populated database.
-#'
-#' Enforces `PRIMARY KEY` and `CHECK` constraints, but deliberately not
-#' `FOREIGN KEY` ones (e.g. `activities.process_id, subprocess` ->
-#' `ideal_processes`): DuckDB allocates a fixed-size index segment per
-#' constraint regardless of row count, which inflated this few-KB registry
-#' to multiple MB for no benefit here. Referential integrity across these
-#' tables is pv_registry_migrate_yaml()'s and the editor app's job, not
-#' the schema's.
 #'
 #' @param con a DBI connection to a DuckDB database.
 #' @return `con`, invisibly.
@@ -45,60 +49,61 @@ pv_registry_db_create_schema <- function(con) {
   DBI::dbExecute(con, "
     CREATE TABLE IF NOT EXISTS subprocesses (
       process_id TEXT NOT NULL,
-      app TEXT NOT NULL,
       subprocess TEXT NOT NULL,
-      step TEXT NOT NULL,
-      step_label TEXT NOT NULL,
-      step_order INTEGER NOT NULL,
-      app_order INTEGER NOT NULL,
-      duckdb_path TEXT,
+      app TEXT NOT NULL,
+      app_link TEXT,
+      log_path TEXT,
       adoption_threshold DOUBLE,
       PRIMARY KEY (process_id, subprocess)
     )")
 
   DBI::dbExecute(con, "
-    CREATE TABLE IF NOT EXISTS ideal_processes (
+    CREATE TABLE IF NOT EXISTS process_edges (
       process_id TEXT NOT NULL,
-      subprocess TEXT NOT NULL,
-      ideal_process_id TEXT,
-      outcome_exclusivity TEXT NOT NULL DEFAULT 'single' CHECK (outcome_exclusivity IN ('single', 'multi')),
-      PRIMARY KEY (process_id, subprocess)
+      from_subprocess TEXT NOT NULL,
+      to_subprocess TEXT NOT NULL,
+      PRIMARY KEY (process_id, from_subprocess, to_subprocess)
     )")
 
   DBI::dbExecute(con, "
-    CREATE TABLE IF NOT EXISTS activities (
+    CREATE TABLE IF NOT EXISTS process_outcomes (
       process_id TEXT NOT NULL,
-      subprocess TEXT NOT NULL,
-      activity_id TEXT NOT NULL,
+      outcome_id TEXT NOT NULL,
       label TEXT NOT NULL,
-      role TEXT NOT NULL,
-      score DOUBLE NOT NULL DEFAULT 0,
-      selector TEXT,
-      kind TEXT,
-      feature TEXT,
-      event TEXT,
-      weight DOUBLE,
-      PRIMARY KEY (process_id, subprocess, activity_id)
+      kind TEXT NOT NULL CHECK (kind IN ('deliverable', 'decision')),
+      subprocess TEXT NOT NULL,
+      tier TEXT CHECK (tier IS NULL OR tier IN ('operational', 'tactical', 'strategic')),
+      outcome_tracking_app TEXT,
+      outcome_tracking_join_key TEXT,
+      PRIMARY KEY (process_id, outcome_id)
     )")
 
   DBI::dbExecute(con, "
-    CREATE TABLE IF NOT EXISTS variant_steps (
+    CREATE TABLE IF NOT EXISTS steps (
       process_id TEXT NOT NULL,
       subprocess TEXT NOT NULL,
-      variant_no INTEGER NOT NULL,
-      step_no INTEGER NOT NULL,
-      activity_id TEXT NOT NULL,
-      PRIMARY KEY (process_id, subprocess, variant_no, step_no)
+      step_id TEXT NOT NULL,
+      label TEXT NOT NULL,
+      PRIMARY KEY (process_id, subprocess, step_id)
     )")
 
   DBI::dbExecute(con, "
-    CREATE TABLE IF NOT EXISTS outcomes (
+    CREATE TABLE IF NOT EXISTS step_edges (
+      process_id TEXT NOT NULL,
+      subprocess TEXT NOT NULL,
+      from_step TEXT NOT NULL,
+      to_step TEXT NOT NULL,
+      PRIMARY KEY (process_id, subprocess, from_step, to_step)
+    )")
+
+  DBI::dbExecute(con, "
+    CREATE TABLE IF NOT EXISTS subprocess_outcomes (
       process_id TEXT NOT NULL,
       subprocess TEXT NOT NULL,
       outcome_id TEXT NOT NULL,
       label TEXT NOT NULL,
       kind TEXT NOT NULL CHECK (kind IN ('deliverable', 'decision')),
-      activity_id TEXT NOT NULL,
+      step_id TEXT NOT NULL,
       tier TEXT CHECK (tier IS NULL OR tier IN ('operational', 'tactical', 'strategic')),
       outcome_tracking_app TEXT,
       outcome_tracking_join_key TEXT,
@@ -106,12 +111,18 @@ pv_registry_db_create_schema <- function(con) {
     )")
 
   DBI::dbExecute(con, "
-    CREATE TABLE IF NOT EXISTS step_variants (
+    CREATE TABLE IF NOT EXISTS clicks (
       process_id TEXT NOT NULL,
-      variant_no INTEGER NOT NULL,
-      step_no INTEGER NOT NULL,
-      step TEXT NOT NULL,
-      PRIMARY KEY (process_id, variant_no, step_no)
+      subprocess TEXT NOT NULL,
+      click_id TEXT NOT NULL,
+      step_id TEXT NOT NULL,
+      label TEXT,
+      selector TEXT,
+      kind TEXT,
+      feature TEXT,
+      event TEXT,
+      weight DOUBLE,
+      PRIMARY KEY (process_id, subprocess, click_id)
     )")
 
   DBI::dbExecute(con, "
@@ -123,210 +134,14 @@ pv_registry_db_create_schema <- function(con) {
   invisible(con)
 }
 
-#' Migrate a hand-authored YAML registry into the DuckDB registry format
-#'
-#' One-off conversion from the original `processes.yml` (plus each app's
-#' `ideal_process` YAML file, read via [pv_load_ideal_process()]) into the
-#' relational schema `pv_registry_db_create_schema()` creates. Field
-#' validation mirrors what the old YAML-based `pv_load_registry()` did --
-#' this is now where that validation happens, since hand-editing moves
-#' from the YAML file to this one conversion (ongoing edits are expected
-#' to go through the registry editor app instead, which writes directly
-#' into an existing database).
-#'
-#' Does not delete `db_path` first: re-running this against a file that
-#' already has the same `process_id`/`subprocess` rows fails loudly on a
-#' PRIMARY KEY violation rather than silently merging two versions.
-#' Delete the file yourself to re-migrate from scratch.
-#'
-#' @param yaml_path path to the YAML registry file (the format the
-#'   package used before the registry moved to DuckDB).
-#' @param db_path path to the DuckDB file to create.
-#' @return `db_path`, invisibly.
-#' @export
-pv_registry_migrate_yaml <- function(yaml_path, db_path) {
-  stopifnot(is.character(yaml_path), length(yaml_path) == 1, file.exists(yaml_path))
-  stopifnot(is.character(db_path), length(db_path) == 1)
-
-  entries <- yaml::read_yaml(yaml_path)
-  if (!is.list(entries) || length(entries) == 0) {
-    stop("proviz: registry at '", yaml_path, "' is empty or not a list of process entries", call. = FALSE)
-  }
-  base_dir <- dirname(normalizePath(yaml_path, mustWork = TRUE))
-
-  required_fields <- c("process_id", "macroprocess", "process", "owner", "status", "loop_length")
-  valid_status <- c("not_started", "designed", "instrumented", "deprecated")
-  valid_loop_length <- c("short", "medium", "long")
-
-  con <- DBI::dbConnect(duckdb::duckdb(), dbdir = db_path, read_only = FALSE)
-  on.exit(DBI::dbDisconnect(con, shutdown = TRUE), add = TRUE)
-  pv_registry_db_create_schema(con)
-
-  # One transaction for the whole migration, not one autocommit per
-  # INSERT -- besides the usual atomicity benefit, DuckDB checkpoints
-  # storage per committed transaction, so hundreds of one-row autocommits
-  # across eight tables was inflating this few-hundred-row registry to
-  # several MB of fragmented segments.
-  DBI::dbExecute(con, "BEGIN TRANSACTION")
-  adoption_source_written <- FALSE
-
-  for (entry in entries) {
-    missing <- setdiff(required_fields, names(entry))
-    if (length(missing) > 0) {
-      stop("proviz: registry entry missing required field(s): ", paste(missing, collapse = ", "),
-        " (entry: ", deparse1_safe(entry), ")",
-        call. = FALSE
-      )
-    }
-    if (!entry$status %in% valid_status) {
-      stop("proviz: registry entry '", entry$process_id, "' has invalid status '", entry$status,
-        "' -- must be one of: ", paste(valid_status, collapse = ", "),
-        call. = FALSE
-      )
-    }
-    if (!entry$loop_length %in% valid_loop_length) {
-      stop("proviz: registry entry '", entry$process_id, "' has invalid loop_length '", entry$loop_length,
-        "' -- must be one of: ", paste(valid_loop_length, collapse = ", "),
-        call. = FALSE
-      )
-    }
-    if (!is.null(entry$ideal_process)) {
-      warning("proviz: registry entry '", entry$process_id, "' has a process-level 'ideal_process' field, ",
-        "which is no longer used -- each app declares its own 'ideal_process' on its subprocess entry. Ignoring it.",
-        call. = FALSE
-      )
-    }
-
-    DBI::dbExecute(con, "INSERT INTO processes VALUES (?, ?, ?, ?, ?, ?)", params = list(
-      entry$process_id, entry$macroprocess, entry$process, entry$owner, entry$status, entry$loop_length
-    ))
-
-    if (!adoption_source_written && !is.null(entry$adoption_source)) {
-      # Stored as given (relative to the YAML's own directory at migration
-      # time), not resolved to an absolute path here -- pv_load_registry()
-      # resolves it relative to the *database's* directory at load time,
-      # so the shipped registry.duckdb stays relocatable (an absolute path
-      # baked in at migration/build time would only be valid on this
-      # machine).
-      DBI::dbExecute(con, "INSERT INTO settings VALUES ('adoption_source', ?)",
-        params = list(entry$adoption_source)
-      )
-      adoption_source_written <- TRUE
-    }
-
-    subs <- entry$subprocesses %||% list()
-    if (entry$status == "instrumented" && length(subs) == 0) {
-      warning("proviz: registry entry '", entry$process_id,
-        "' is status 'instrumented' but declares no subprocesses -- it will contribute no data",
-        call. = FALSE
-      )
-    }
-
-    step_counters <- list()
-    for (s in subs) {
-      required_sub_fields <- c("app", "subprocess", "step", "step_order")
-      if (entry$status == "instrumented") required_sub_fields <- c(required_sub_fields, "duckdb_path")
-      sub_missing <- setdiff(required_sub_fields, names(s))
-      if (length(sub_missing) > 0) {
-        stop("proviz: a subprocess entry under '", entry$process_id,
-          "' is missing required field(s): ", paste(sub_missing, collapse = ", "),
-          call. = FALSE
-        )
-      }
-
-      step_counters[[s$step]] <- (step_counters[[s$step]] %||% 0L) + 1L
-      step_label <- s$step_label %||% pv_prettify_label(s$step)
-      app_order <- as.integer(s$app_order %||% step_counters[[s$step]])
-
-      DBI::dbExecute(con, "INSERT INTO subprocesses VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", params = list(
-        entry$process_id, s$app, s$subprocess, s$step, step_label,
-        as.integer(s$step_order), app_order,
-        s$duckdb_path %||% NA_character_, as.numeric(s$adoption_threshold %||% NA_real_)
-      ))
-
-      if (!is.null(s$ideal_process)) {
-        ideal_path <- file.path(base_dir, s$ideal_process)
-        if (!file.exists(ideal_path)) {
-          warning("proviz: ideal_process file for '", entry$process_id, "::", s$subprocess,
-            "' not found at '", ideal_path, "'",
-            call. = FALSE
-          )
-        } else {
-          ip <- pv_load_ideal_process(ideal_path)
-
-          DBI::dbExecute(con, "INSERT INTO ideal_processes VALUES (?, ?, ?, ?)", params = list(
-            entry$process_id, s$subprocess, ip$process_id, ip$outcome_exclusivity
-          ))
-
-          for (r in seq_len(nrow(ip$activities))) {
-            a <- ip$activities[r, ]
-            DBI::dbExecute(con, "INSERT INTO activities VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", params = list(
-              entry$process_id, s$subprocess, a$id, a$label, a$role, a$score,
-              NA_character_, NA_character_, NA_character_, NA_character_, NA_real_
-            ))
-          }
-
-          for (vno in seq_along(ip$variants)) {
-            v <- ip$variants[[vno]]
-            for (sno in seq_along(v)) {
-              DBI::dbExecute(con, "INSERT INTO variant_steps VALUES (?, ?, ?, ?, ?)", params = list(
-                entry$process_id, s$subprocess, vno - 1L, sno - 1L, v[sno]
-              ))
-            }
-          }
-
-          for (r in seq_len(nrow(ip$outcomes))) {
-            o <- ip$outcomes[r, ]
-            DBI::dbExecute(con, "INSERT INTO outcomes VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", params = list(
-              entry$process_id, s$subprocess, o$id, o$label, o$kind, o$activity_id,
-              o$tier, o$outcome_tracking_app, o$outcome_tracking_join_key
-            ))
-          }
-        }
-      }
-    }
-
-    # An empty `step_variants: []` is treated the same as omitting the
-    # field entirely (no rows written -- pv_load_registry() then leaves
-    # $step_variants[[process_id]] absent, and pv_step_sequence() falls
-    # back to the step_order-derived sequence) -- not as "zero acceptable
-    # paths", which would silently make conformance unscorable (NA) for
-    # every case.
-    if (!is.null(entry$step_variants) && length(entry$step_variants) > 0) {
-      declared <- lapply(entry$step_variants, function(v) as.character(unlist(v)))
-      known_steps <- vapply(subs, function(s) s$step, character(1))
-      unknown <- unique(unlist(lapply(declared, setdiff, y = known_steps)))
-      if (length(unknown) > 0) {
-        stop("proviz: registry entry '", entry$process_id,
-          "' has step_variants referencing unknown step(s): ", paste(unknown, collapse = ", "),
-          call. = FALSE
-        )
-      }
-      for (vno in seq_along(declared)) {
-        v <- declared[[vno]]
-        for (sno in seq_along(v)) {
-          DBI::dbExecute(con, "INSERT INTO step_variants VALUES (?, ?, ?, ?)", params = list(
-            entry$process_id, vno - 1L, sno - 1L, v[sno]
-          ))
-        }
-      }
-    }
-  }
-
-  DBI::dbExecute(con, "COMMIT")
-  invisible(db_path)
-}
-
-## -----------------------------------------------------------------------
-## Write helpers for the registry editor app (run_registry_editor()).
-##
-## Each opens its own short-lived read-write connection and closes it
-## before returning -- never held open across a Shiny reactive tick --
-## so the editor and the read-only analytics dashboard (pv_load_registry())
-## don't contend for the database file any longer than a single edit
-## takes. Each is plain, testable R: the Shiny layer only wires inputs to
-## these and turns a thrown error into a user-facing notification.
-## -----------------------------------------------------------------------
+## -------------------------------------------------------------------------
+## Write helpers -- for the registry editor app (run_registry_editor()) and
+## for seeding registries (pv_demo_registry(), data-raw scripts). Each opens
+## its own short-lived read-write connection and closes it before returning
+## -- never held open across a Shiny reactive tick -- so a long-running
+## editor session and the read-only analytics dashboard (pv_load_registry())
+## don't contend for the database file any longer than one edit takes.
+## -------------------------------------------------------------------------
 
 #' @noRd
 pv_registry_db_connect <- function(path, read_only = FALSE) {
@@ -344,148 +159,141 @@ pv_registry_db_insert_process <- function(path, process_id, macroprocess, proces
   invisible(process_id)
 }
 
-#' Add an app/step (a `subprocesses` row) to an existing process.
-#' `app_order` defaults to one past the highest `app_order` already
-#' declared for this `(process_id, step)` -- mirrors how
-#' [pv_registry_migrate_yaml()] numbers apps within a step.
+#' Add an app (a `subprocesses` row, 1:1 with the app) to a process
 #' @noRd
-pv_registry_db_insert_subprocess <- function(path, process_id, app, subprocess, step, step_label = NULL,
-                                              step_order, app_order = NULL, duckdb_path = NA_character_,
-                                              adoption_threshold = NA_real_) {
+pv_registry_db_insert_subprocess <- function(path, process_id, subprocess, app, app_link = NA_character_,
+                                              log_path = NA_character_, adoption_threshold = NA_real_) {
   con <- pv_registry_db_connect(path)
   on.exit(DBI::dbDisconnect(con, shutdown = TRUE), add = TRUE)
-
-  if (is.null(app_order)) {
-    existing_max <- DBI::dbGetQuery(con, "
-      SELECT MAX(app_order) AS m FROM subprocesses WHERE process_id = ? AND step = ?",
-      params = list(process_id, step)
-    )$m
-    app_order <- as.integer((existing_max %||% 0L) + 1L)
-  }
-  if (is.null(step_label)) step_label <- pv_prettify_label(step)
-
-  DBI::dbExecute(con, "INSERT INTO subprocesses VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", params = list(
-    process_id, app, subprocess, step, step_label, as.integer(step_order), as.integer(app_order),
-    duckdb_path, as.numeric(adoption_threshold)
+  DBI::dbExecute(con, "INSERT INTO subprocesses VALUES (?, ?, ?, ?, ?, ?)", params = list(
+    process_id, subprocess, app, app_link, log_path, as.numeric(adoption_threshold)
   ))
   invisible(subprocess)
 }
 
-#' Add or update one activity on an app's ideal process, creating the
-#' `ideal_processes` meta row first if this is the app's first activity.
-#' Idempotent on `(process_id, subprocess, activity_id)` -- re-saving a
-#' curated scan row (e.g. after fixing a typo) updates it in place rather
-#' than erroring on the primary key.
+#' Declare one allowed transition between two of a process's subprocesses
+#' (an edge in the process-level diagram). Cycles are allowed (e.g.
+#' `to_subprocess` can equal an earlier node, for a rework loop).
 #' @noRd
-pv_registry_db_upsert_activity <- function(path, process_id, subprocess, activity_id, label, role,
-                                            score = 0, selector = NA_character_, kind = NA_character_,
-                                            feature = NA_character_, event = NA_character_, weight = NA_real_,
-                                            outcome_exclusivity = "single") {
+pv_registry_db_insert_process_edge <- function(path, process_id, from_subprocess, to_subprocess) {
   con <- pv_registry_db_connect(path)
   on.exit(DBI::dbDisconnect(con, shutdown = TRUE), add = TRUE)
-
-  DBI::dbExecute(con, "
-    INSERT INTO ideal_processes VALUES (?, ?, ?, ?)
-    ON CONFLICT (process_id, subprocess) DO NOTHING",
-    params = list(process_id, subprocess, subprocess, outcome_exclusivity)
-  )
-  DBI::dbExecute(con, "
-    INSERT INTO activities VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    ON CONFLICT (process_id, subprocess, activity_id) DO UPDATE SET
-      label = excluded.label, role = excluded.role, score = excluded.score,
-      selector = excluded.selector, kind = excluded.kind, feature = excluded.feature,
-      event = excluded.event, weight = excluded.weight",
-    params = list(
-      process_id, subprocess, activity_id, label, role, as.numeric(score),
-      selector, kind, feature, event, as.numeric(weight)
-    ))
-  invisible(activity_id)
-}
-
-#' Declare one acceptable activity-id sequence for an app's ideal process
-#' -- the next `variant_no` after whatever's already declared. Errors if
-#' any id isn't already a known activity for this app (same check
-#' [pv_registry_migrate_yaml()] applies to `step_variants`).
-#' @noRd
-pv_registry_db_insert_variant <- function(path, process_id, subprocess, activity_ids) {
-  activity_ids <- as.character(activity_ids)
-  con <- pv_registry_db_connect(path)
-  on.exit(DBI::dbDisconnect(con, shutdown = TRUE), add = TRUE)
-
-  known <- DBI::dbGetQuery(con, "SELECT activity_id FROM activities WHERE process_id = ? AND subprocess = ?",
-    params = list(process_id, subprocess))$activity_id
-  unknown <- setdiff(activity_ids, known)
+  known <- DBI::dbGetQuery(con, "SELECT subprocess FROM subprocesses WHERE process_id = ?",
+    params = list(process_id))$subprocess
+  unknown <- setdiff(c(from_subprocess, to_subprocess), known)
   if (length(unknown) > 0) {
-    stop("proviz: variant references unknown activity id(s) for '", process_id, "::", subprocess,
-      "': ", paste(unknown, collapse = ", "), call. = FALSE)
+    stop("proviz: process_edge references unknown subprocess(es) for '", process_id, "': ",
+      paste(unknown, collapse = ", "), call. = FALSE)
   }
-
-  next_variant <- (DBI::dbGetQuery(con, "
-    SELECT COALESCE(MAX(variant_no), -1) AS m FROM variant_steps WHERE process_id = ? AND subprocess = ?",
-    params = list(process_id, subprocess))$m + 1L)
-
-  for (step_no in seq_along(activity_ids)) {
-    DBI::dbExecute(con, "INSERT INTO variant_steps VALUES (?, ?, ?, ?, ?)", params = list(
-      process_id, subprocess, next_variant, step_no - 1L, activity_ids[step_no]
-    ))
-  }
-  invisible(next_variant)
+  DBI::dbExecute(con, "
+    INSERT INTO process_edges VALUES (?, ?, ?)
+    ON CONFLICT (process_id, from_subprocess, to_subprocess) DO NOTHING",
+    params = list(process_id, from_subprocess, to_subprocess))
+  invisible(NULL)
 }
 
-#' Add one named outcome to an app's ideal process. Idempotent on
-#' `(process_id, subprocess, outcome_id)`.
+#' Add or update a process-level outcome (concluded by one of the
+#' process's subprocess-nodes). Idempotent on `(process_id, outcome_id)`.
 #' @noRd
-pv_registry_db_upsert_outcome <- function(path, process_id, subprocess, outcome_id, label, kind, activity_id,
-                                           tier = NA_character_, outcome_tracking_app = NA_character_,
-                                           outcome_tracking_join_key = NA_character_) {
+pv_registry_db_upsert_process_outcome <- function(path, process_id, outcome_id, label, kind, subprocess,
+                                                   tier = NA_character_, outcome_tracking_app = NA_character_,
+                                                   outcome_tracking_join_key = NA_character_) {
   con <- pv_registry_db_connect(path)
   on.exit(DBI::dbDisconnect(con, shutdown = TRUE), add = TRUE)
   DBI::dbExecute(con, "
-    INSERT INTO outcomes VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO process_outcomes VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT (process_id, outcome_id) DO UPDATE SET
+      label = excluded.label, kind = excluded.kind, subprocess = excluded.subprocess,
+      tier = excluded.tier, outcome_tracking_app = excluded.outcome_tracking_app,
+      outcome_tracking_join_key = excluded.outcome_tracking_join_key",
+    params = list(process_id, outcome_id, label, kind, subprocess, tier, outcome_tracking_app, outcome_tracking_join_key))
+  invisible(outcome_id)
+}
+
+#' Add one step (a node in a subprocess's own diagram) -- e.g. a telemetry
+#' catalog feature like `"validate"` or `"setting params"`.
+#' @noRd
+pv_registry_db_insert_step <- function(path, process_id, subprocess, step_id, label = NULL) {
+  con <- pv_registry_db_connect(path)
+  on.exit(DBI::dbDisconnect(con, shutdown = TRUE), add = TRUE)
+  DBI::dbExecute(con, "
+    INSERT INTO steps VALUES (?, ?, ?, ?)
+    ON CONFLICT (process_id, subprocess, step_id) DO UPDATE SET label = excluded.label",
+    params = list(process_id, subprocess, step_id, label %||% pv_prettify_label(step_id)))
+  invisible(step_id)
+}
+
+#' Declare one allowed transition between two of a subprocess's steps.
+#' Cycles are allowed. Errors if either step isn't already declared.
+#' @noRd
+pv_registry_db_insert_step_edge <- function(path, process_id, subprocess, from_step, to_step) {
+  con <- pv_registry_db_connect(path)
+  on.exit(DBI::dbDisconnect(con, shutdown = TRUE), add = TRUE)
+  known <- DBI::dbGetQuery(con, "SELECT step_id FROM steps WHERE process_id = ? AND subprocess = ?",
+    params = list(process_id, subprocess))$step_id
+  unknown <- setdiff(c(from_step, to_step), known)
+  if (length(unknown) > 0) {
+    stop("proviz: step_edge references unknown step(s) for '", process_id, "::", subprocess, "': ",
+      paste(unknown, collapse = ", "), call. = FALSE)
+  }
+  DBI::dbExecute(con, "
+    INSERT INTO step_edges VALUES (?, ?, ?, ?)
+    ON CONFLICT (process_id, subprocess, from_step, to_step) DO NOTHING",
+    params = list(process_id, subprocess, from_step, to_step))
+  invisible(NULL)
+}
+
+#' Add or update a subprocess-level outcome (concluded by one of its own
+#' steps). Idempotent on `(process_id, subprocess, outcome_id)`.
+#' @noRd
+pv_registry_db_upsert_subprocess_outcome <- function(path, process_id, subprocess, outcome_id, label, kind, step_id,
+                                                      tier = NA_character_, outcome_tracking_app = NA_character_,
+                                                      outcome_tracking_join_key = NA_character_) {
+  con <- pv_registry_db_connect(path)
+  on.exit(DBI::dbDisconnect(con, shutdown = TRUE), add = TRUE)
+  DBI::dbExecute(con, "
+    INSERT INTO subprocess_outcomes VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT (process_id, subprocess, outcome_id) DO UPDATE SET
-      label = excluded.label, kind = excluded.kind, activity_id = excluded.activity_id,
+      label = excluded.label, kind = excluded.kind, step_id = excluded.step_id,
       tier = excluded.tier, outcome_tracking_app = excluded.outcome_tracking_app,
       outcome_tracking_join_key = excluded.outcome_tracking_join_key",
     params = list(
-      process_id, subprocess, outcome_id, label, kind, activity_id,
+      process_id, subprocess, outcome_id, label, kind, step_id,
       tier, outcome_tracking_app, outcome_tracking_join_key
     ))
   invisible(outcome_id)
 }
 
-#' Declare one acceptable step-slug sequence for a business process's
-#' flow -- the next `variant_no` after whatever's already declared.
-#' Errors if any step isn't already declared on one of the process's
-#' subprocesses (same check [pv_registry_migrate_yaml()] applies).
+#' Add or update one click -> step binding (many clicks can map to one
+#' step; `weight` is what a real recorder sums into that log's
+#' `total_weight` -- this table isn't consulted when reading a real log,
+#' only when exporting a telemetry config for the recorder to use).
+#' Idempotent on `(process_id, subprocess, click_id)`.
 #' @noRd
-pv_registry_db_insert_step_variant <- function(path, process_id, steps) {
-  steps <- as.character(steps)
+pv_registry_db_upsert_click <- function(path, process_id, subprocess, click_id, step_id, label = NA_character_,
+                                         selector = NA_character_, kind = NA_character_, feature = NA_character_,
+                                         event = NA_character_, weight = NA_real_) {
   con <- pv_registry_db_connect(path)
   on.exit(DBI::dbDisconnect(con, shutdown = TRUE), add = TRUE)
-
-  known <- DBI::dbGetQuery(con, "SELECT DISTINCT step FROM subprocesses WHERE process_id = ?",
-    params = list(process_id))$step
-  unknown <- setdiff(steps, known)
-  if (length(unknown) > 0) {
-    stop("proviz: step_variant references unknown step(s) for '", process_id, "': ",
-      paste(unknown, collapse = ", "), call. = FALSE)
+  known <- DBI::dbGetQuery(con, "SELECT step_id FROM steps WHERE process_id = ? AND subprocess = ?",
+    params = list(process_id, subprocess))$step_id
+  if (!step_id %in% known) {
+    stop("proviz: click references unknown step '", step_id, "' for '", process_id, "::", subprocess, "'", call. = FALSE)
   }
-
-  next_variant <- (DBI::dbGetQuery(con, "
-    SELECT COALESCE(MAX(variant_no), -1) AS m FROM step_variants WHERE process_id = ?",
-    params = list(process_id))$m + 1L)
-
-  for (step_no in seq_along(steps)) {
-    DBI::dbExecute(con, "INSERT INTO step_variants VALUES (?, ?, ?, ?)", params = list(
-      process_id, next_variant, step_no - 1L, steps[step_no]
+  DBI::dbExecute(con, "
+    INSERT INTO clicks VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT (process_id, subprocess, click_id) DO UPDATE SET
+      step_id = excluded.step_id, label = excluded.label, selector = excluded.selector,
+      kind = excluded.kind, feature = excluded.feature, event = excluded.event, weight = excluded.weight",
+    params = list(
+      process_id, subprocess, click_id, step_id, label, selector, kind, feature, event, as.numeric(weight)
     ))
-  }
-  invisible(next_variant)
+  invisible(click_id)
 }
 
 #' Set (or replace) the registry-wide `adoption_source` setting -- a path
-#' relative to the registry database's own directory, same convention
-#' [pv_registry_migrate_yaml()] and [pv_load_registry()] use.
+#' relative to the registry database's own directory, resolved at read
+#' time by [pv_load_registry()].
 #' @noRd
 pv_registry_db_set_adoption_source <- function(path, relative_path) {
   con <- pv_registry_db_connect(path)

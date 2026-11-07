@@ -3,31 +3,30 @@
 #' A separate, write-capable companion to the (strictly read-only)
 #' process intelligence dashboard ([run_pi_dashboard()]) -- the
 #' read/write boundary is why this is its own Shiny app rather than a
-#' dashboard tab. Drives the registry's "scan + human curation" workflow:
-#' run [pv_scan_app()] against a target app's source, review the
-#' candidate hook inventory it finds, map each hook a human wants to
-#' track onto a business activity (an id, label, role, and the
-#' selector/kind/feature/event/weight a future telemetry export will
-#' need), and declare that app's acceptable activity sequences
-#' (variants) and named outcomes -- all written directly into the
-#' registry DuckDB file [pv_load_registry()] reads.
+#' dashboard tab. Drives the registry's "scan + human curation"
+#' workflow end to end, against the four-artifact model (registry,
+#' ideal diagrams, click map, event log -- see [pv_load_registry()]'s
+#' docs):
+#' \itemize{
+#'   \item **Processes & apps**: add a business process, add an app
+#'     (a `subprocess`, 1:1 with it) to an existing process.
+#'   \item **Process flow**: declare allowed transitions between a
+#'     process's own apps (cycles allowed -- a rework loop is just a
+#'     back-edge), and named process-level outcomes.
+#'   \item **Scan & map steps**: run [pv_scan_app()] against a target
+#'     app's source, review the candidate hook inventory, map each hook
+#'     a human wants to track onto a step (creating it if new) with its
+#'     concrete click binding (selector/kind/feature/event/weight) --
+#'     many clicks can map to one step.
+#'   \item **Steps & outcomes**: declare an app's allowed step
+#'     transitions (its own diagram) and named outcomes.
+#' }
 #'
-#' v1 scope is deliberately append-only: add a process, add an app to an
-#' existing process, add/update activities (including by curating a
-#' fresh scan), add a variant, add an outcome, add a business-level step
-#' variant. There is no delete or rename here yet -- editing a mistake
-#' means fixing it with a direct `DBI`/DuckDB statement against the file,
-#' same as any other data-entry error would need until a later version
-#' adds it.
-#'
-#' Every write opens its own short-lived connection and closes it before
-#' the next reactive tick (see the `pv_registry_db_*` write helpers) --
-#' it never holds the registry file open, so [run_pi_dashboard()] (or
-#' another editor session) can read or write it between edits. Running
-#' this and the dashboard against the very same file at the exact same
-#' instant can still collide (DuckDB allows one writer at a time); this
-#' is meant for the occasional, human-paced editing session, not
-#' concurrent multi-user use.
+#' v1 is deliberately append-only (no delete/rename yet). Every write
+#' goes through a small set of plain, unit-tested `pv_registry_db_*`
+#' helpers that open a connection, write, and close before the next
+#' reactive tick, so the editor never holds the registry file open
+#' against the dashboard or another edit.
 #'
 #' @param registry_path path to the registry DuckDB file to edit.
 #' @param ... passed on to `shiny::runApp()` (e.g. `port`, `launch.browser`).
@@ -40,9 +39,9 @@ run_registry_editor <- function(registry_path, ...) {
     title = "Registry Editor",
     theme = pv_theme(),
     bslib::nav_panel("Processes & apps", pv_registry_editor_processes_ui("processes")),
-    bslib::nav_panel("Scan & map activities", pv_registry_editor_scan_ui("scan")),
-    bslib::nav_panel("Variants & outcomes", pv_registry_editor_ideal_ui("ideal")),
-    bslib::nav_panel("Step flow", pv_registry_editor_stepflow_ui("stepflow"))
+    bslib::nav_panel("Process flow", pv_registry_editor_processflow_ui("processflow")),
+    bslib::nav_panel("Scan & map steps", pv_registry_editor_scan_ui("scan")),
+    bslib::nav_panel("Steps & outcomes", pv_registry_editor_steps_ui("steps"))
   )
 
   server <- function(input, output, session) {
@@ -55,21 +54,13 @@ run_registry_editor <- function(registry_path, ...) {
     })
 
     pv_registry_editor_processes_server("processes", registry_path, registry, touch)
+    pv_registry_editor_processflow_server("processflow", registry_path, registry, touch)
     pv_registry_editor_scan_server("scan", registry_path, registry, touch)
-    pv_registry_editor_ideal_server("ideal", registry_path, registry, touch)
-    pv_registry_editor_stepflow_server("stepflow", registry_path, registry, touch)
+    pv_registry_editor_steps_server("steps", registry_path, registry, touch)
   }
 
   shiny::runApp(shiny::shinyApp(ui, server), ...)
 }
-
-#' `x %||% default` only falls back on `NULL`, not `NA` -- these DT-edited
-#' columns come back as (possibly-`NA`) vector elements, never `NULL`, so
-#' a plain `%||%` would leave e.g. `activities.role`'s `NOT NULL`
-#' constraint violated by a blank cell the human never filled in. `x` is
-#' always length 1 here (one row's one cell).
-#' @noRd
-pv_na_default <- function(x, default) if (is.na(x)) default else x
 
 #' @noRd
 pv_registry_editor_notify_error <- function(expr) {
@@ -78,6 +69,13 @@ pv_registry_editor_notify_error <- function(expr) {
     NULL
   })
 }
+
+#' `x %||% default` only falls back on `NULL`, not `NA` -- these DT-edited
+#' columns come back as (possibly-`NA`) vector elements, never `NULL`, so
+#' a plain `%||%` would leave e.g. a `NOT NULL` text column violated by a
+#' blank cell the human never filled in. `x` is always length 1 here.
+#' @noRd
+pv_na_default <- function(x, default) if (is.na(x)) default else x
 
 ## -------------------------------------------------------------------------
 ## Tab 1: Processes & apps
@@ -94,7 +92,7 @@ pv_registry_editor_processes_ui <- function(id) {
         DT::DTOutput(ns("processes_table"))
       ),
       bslib::card(
-        bslib::card_header("Apps / steps"),
+        bslib::card_header("Apps"),
         DT::DTOutput(ns("subprocesses_table"))
       )
     ),
@@ -113,12 +111,10 @@ pv_registry_editor_processes_ui <- function(id) {
       bslib::card(
         bslib::card_header("Add an app to an existing process"),
         shiny::selectInput(ns("sub_process_id"), "process_id", choices = NULL),
-        shiny::textInput(ns("app"), "app"),
-        shiny::textInput(ns("subprocess"), "subprocess"),
-        shiny::textInput(ns("step"), "step (slug)"),
-        shiny::textInput(ns("step_label"), "step_label (optional)"),
-        shiny::numericInput(ns("step_order"), "step_order", value = 1, min = 1, step = 1),
-        shiny::textInput(ns("duckdb_path"), "duckdb_path (optional, once instrumented)"),
+        shiny::textInput(ns("subprocess"), "subprocess (id)"),
+        shiny::textInput(ns("app"), "app (display name -- can differ from subprocess)"),
+        shiny::textInput(ns("app_link"), "app_link (optional, a URL)"),
+        shiny::textInput(ns("log_path"), "log_path (optional, once instrumented)"),
         shiny::numericInput(ns("adoption_threshold"), "adoption_threshold (optional)", value = NA),
         shiny::actionButton(ns("add_subprocess"), "Add app", class = "btn-primary")
       )
@@ -138,7 +134,7 @@ pv_registry_editor_processes_server <- function(id, registry_path, registry, tou
       DT::datatable(registry()$processes, rownames = FALSE, options = list(pageLength = 10, dom = "tp"), class = "compact stripe")
     })
     output$subprocesses_table <- DT::renderDT({
-      DT::datatable(registry()$subprocesses, rownames = FALSE, options = list(pageLength = 10, dom = "tp"), class = "compact stripe")
+      DT::datatable(registry()$subprocesses, rownames = FALSE, options = list(pageLength = 10, dom = "tp", scrollX = TRUE), class = "compact stripe")
     })
 
     shiny::observeEvent(input$add_process, {
@@ -155,12 +151,11 @@ pv_registry_editor_processes_server <- function(id, registry_path, registry, tou
 
     shiny::observeEvent(input$add_subprocess, {
       pv_registry_editor_notify_error({
-        shiny::req(input$sub_process_id, input$app, input$subprocess, input$step, input$step_order)
+        shiny::req(input$sub_process_id, input$subprocess, input$app)
         pv_registry_db_insert_subprocess(
-          registry_path, input$sub_process_id, input$app, input$subprocess, input$step,
-          step_label = if (nzchar(input$step_label %||% "")) input$step_label else NULL,
-          step_order = input$step_order,
-          duckdb_path = if (nzchar(input$duckdb_path %||% "")) input$duckdb_path else NA_character_,
+          registry_path, input$sub_process_id, input$subprocess, input$app,
+          app_link = if (nzchar(input$app_link %||% "")) input$app_link else NA_character_,
+          log_path = if (nzchar(input$log_path %||% "")) input$log_path else NA_character_,
           adoption_threshold = input$adoption_threshold
         )
         shiny::showNotification(paste0("Added app '", input$app, "'"), type = "message")
@@ -171,7 +166,110 @@ pv_registry_editor_processes_server <- function(id, registry_path, registry, tou
 }
 
 ## -------------------------------------------------------------------------
-## Tab 2: Scan & map activities
+## Tab 2: Process flow (edges between a process's own apps, + outcomes)
+## -------------------------------------------------------------------------
+
+#' @noRd
+pv_registry_editor_processflow_ui <- function(id) {
+  ns <- shiny::NS(id)
+  shiny::fluidRow(
+    shiny::column(
+      4,
+      bslib::card(
+        bslib::card_header("Process"),
+        shiny::selectInput(ns("process_id"), "process_id", choices = NULL)
+      ),
+      bslib::card(
+        bslib::card_header("Add an allowed transition"),
+        shiny::helpText("Cycles are allowed -- e.g. a rework loop back to an earlier app."),
+        shiny::selectInput(ns("from_subprocess"), "From app", choices = NULL),
+        shiny::selectInput(ns("to_subprocess"), "To app", choices = NULL),
+        shiny::actionButton(ns("add_edge"), "Add transition", class = "btn-primary")
+      ),
+      bslib::card(
+        bslib::card_header("Add a process-level outcome"),
+        shiny::textInput(ns("outcome_id"), "outcome_id"),
+        shiny::textInput(ns("outcome_label"), "label"),
+        shiny::selectInput(ns("outcome_kind"), "kind", c("deliverable", "decision")),
+        shiny::selectInput(ns("outcome_subprocess"), "concluded by app", choices = NULL),
+        shiny::selectInput(ns("outcome_tier"), "tier (decisions only)", c("", "operational", "tactical", "strategic")),
+        shiny::actionButton(ns("add_outcome"), "Add outcome", class = "btn-primary")
+      )
+    ),
+    shiny::column(
+      8,
+      bslib::card(bslib::card_header("Apps"), DT::DTOutput(ns("apps_table"))),
+      bslib::card(bslib::card_header("Declared transitions"), DT::DTOutput(ns("edges_table"))),
+      bslib::card(bslib::card_header("Declared process-level outcomes"), DT::DTOutput(ns("outcomes_table")))
+    )
+  )
+}
+
+#' @noRd
+pv_registry_editor_processflow_server <- function(id, registry_path, registry, touch) {
+  shiny::moduleServer(id, function(input, output, session) {
+    shiny::observe({
+      ids <- stats::setNames(registry()$processes$process_id, registry()$processes$process)
+      shiny::updateSelectInput(session, "process_id", choices = ids)
+    })
+
+    process_subs <- shiny::reactive({
+      shiny::req(input$process_id)
+      registry()$subprocesses[registry()$subprocesses$process_id == input$process_id, ]
+    })
+
+    shiny::observe({
+      choices <- stats::setNames(process_subs()$subprocess, process_subs()$app)
+      shiny::updateSelectInput(session, "from_subprocess", choices = choices)
+      shiny::updateSelectInput(session, "to_subprocess", choices = choices)
+      shiny::updateSelectInput(session, "outcome_subprocess", choices = choices)
+    })
+
+    diagram <- shiny::reactive({
+      shiny::req(input$process_id)
+      registry()$process_diagrams[[input$process_id]]
+    })
+
+    output$apps_table <- DT::renderDT({
+      DT::datatable(process_subs(), rownames = FALSE, options = list(pageLength = 10, dom = "tp"), class = "compact stripe")
+    })
+    output$edges_table <- DT::renderDT({
+      edges <- diagram()$edges
+      shiny::validate(shiny::need(!is.null(edges) && nrow(edges) > 0, "No transitions declared yet."))
+      DT::datatable(edges, rownames = FALSE, options = list(pageLength = 10, dom = "tp"), class = "compact stripe")
+    })
+    output$outcomes_table <- DT::renderDT({
+      outcomes <- diagram()$outcomes
+      shiny::validate(shiny::need(!is.null(outcomes) && nrow(outcomes) > 0, "No outcomes declared yet."))
+      DT::datatable(outcomes, rownames = FALSE, options = list(pageLength = 10, dom = "tp"), class = "compact stripe")
+    })
+
+    shiny::observeEvent(input$add_edge, {
+      pv_registry_editor_notify_error({
+        shiny::req(input$process_id, input$from_subprocess, input$to_subprocess)
+        pv_registry_db_insert_process_edge(registry_path, input$process_id, input$from_subprocess, input$to_subprocess)
+        shiny::showNotification("Added transition", type = "message")
+        touch()
+      })
+    })
+
+    shiny::observeEvent(input$add_outcome, {
+      pv_registry_editor_notify_error({
+        shiny::req(input$process_id, input$outcome_id, input$outcome_label, input$outcome_subprocess)
+        pv_registry_db_upsert_process_outcome(
+          registry_path, input$process_id, input$outcome_id, input$outcome_label,
+          input$outcome_kind, input$outcome_subprocess,
+          tier = if (nzchar(input$outcome_tier)) input$outcome_tier else NA_character_
+        )
+        shiny::showNotification(paste0("Added outcome '", input$outcome_id, "'"), type = "message")
+        touch()
+      })
+    })
+  })
+}
+
+## -------------------------------------------------------------------------
+## Tab 3: Scan & map steps
 ## -------------------------------------------------------------------------
 
 #' @noRd
@@ -182,14 +280,15 @@ pv_registry_editor_scan_ui <- function(id) {
       4,
       bslib::card(
         bslib::card_header("Scan"),
-        shiny::selectInput(ns("target_subprocess"), "App (subprocess) to map hooks onto", choices = NULL),
+        shiny::selectInput(ns("target_subprocess"), "App to map hooks onto", choices = NULL),
         shiny::textInput(ns("scan_dir"), "Directory to scan", placeholder = "/path/to/shiny/app"),
         shiny::actionButton(ns("run_scan"), "Run scan", class = "btn-primary"),
         shiny::helpText(
           "Static-analysis inventory of UI widgets, observeEvent() triggers, etc. ",
-          "(see pv_scan_app()). Fill in 'activity_id' for every row you want to keep; ",
-          "blank rows are skipped on save. 'selector' defaults to '#' + the widget id, ",
-          "which is right for most Shiny inputs but not for nav tabs -- check it."
+          "(see pv_scan_app()). Fill in 'step_id' for every row you want to keep (creating a ",
+          "new step if it doesn't exist yet, or reusing one so several clicks count toward the ",
+          "same step); blank rows are skipped on save. 'selector' defaults to '#' + the widget ",
+          "id, which is right for most Shiny inputs but not for nav tabs -- check it."
         )
       )
     ),
@@ -199,14 +298,14 @@ pv_registry_editor_scan_ui <- function(id) {
         bslib::card_header("Candidate hooks -- edit the mapping columns, then save"),
         DT::DTOutput(ns("scan_table")),
         shiny::br(),
-        shiny::actionButton(ns("save_activities"), "Save mapped activities", class = "btn-primary")
+        shiny::actionButton(ns("save_clicks"), "Save mapped steps", class = "btn-primary")
       )
     )
   )
 }
 
 #' @noRd
-.pv_scan_editable_cols <- c("activity_id", "label", "role", "score", "selector", "kind", "feature", "event", "weight")
+.pv_scan_editable_cols <- c("step_id", "label", "selector", "kind", "feature", "event", "weight")
 
 #' @noRd
 pv_registry_editor_scan_server <- function(id, registry_path, registry, touch) {
@@ -226,13 +325,12 @@ pv_registry_editor_scan_server <- function(id, registry_path, registry, touch) {
         hooks <- pv_scan_app(input$scan_dir)
         # pv_scan_app()'s own `kind` is the finding type (ui_widget,
         # nav_tab, ...) -- useful context, kept as `hook_type` -- not the
-        # DOM-event kind (click/change/tab) a telemetry mapping needs, so
-        # the editable `kind` column starts blank rather than inheriting
-        # a value in the wrong vocabulary.
+        # DOM-event kind (click/change/tab) a click mapping needs, so the
+        # editable `kind` column starts blank rather than inheriting a
+        # value in the wrong vocabulary.
         hooks$hook_type <- hooks$kind
+        hooks$step_id <- hooks$activity_id
         hooks$label <- hooks$label %||% NA_character_
-        hooks$role <- NA_character_
-        hooks$score <- 0
         # a reasonable starting guess, not a claim -- Shiny renders most
         # input widgets with id="<inputId>" in the DOM, but nav tabs and
         # anything custom need the human to correct this.
@@ -271,23 +369,26 @@ pv_registry_editor_scan_server <- function(id, registry_path, registry, touch) {
       scan_result(df)
     })
 
-    shiny::observeEvent(input$save_activities, {
+    shiny::observeEvent(input$save_clicks, {
       pv_registry_editor_notify_error({
         shiny::req(input$target_subprocess, scan_result())
         process_id <- registry()$subprocesses$process_id[registry()$subprocesses$subprocess == input$target_subprocess][1]
         df <- scan_result()
-        to_save <- df[!is.na(df$activity_id) & nzchar(df$activity_id), ]
+        to_save <- df[!is.na(df$step_id) & nzchar(df$step_id), ]
         shiny::req(nrow(to_save) > 0)
+        for (step_id in unique(to_save$step_id)) {
+          pv_registry_db_insert_step(registry_path, process_id, input$target_subprocess, step_id)
+        }
         for (i in seq_len(nrow(to_save))) {
           r <- to_save[i, ]
-          pv_registry_db_upsert_activity(
-            registry_path, process_id, input$target_subprocess, r$activity_id,
-            label = pv_na_default(r$label, r$activity_id), role = pv_na_default(r$role, "Unassigned"),
-            score = pv_na_default(r$score, 0), selector = r$selector, kind = r$kind,
-            feature = pv_na_default(r$feature, r$activity_id), event = r$event, weight = r$weight
+          click_id <- pv_na_default(r$id, paste0(r$step_id, "_", i))
+          pv_registry_db_upsert_click(
+            registry_path, process_id, input$target_subprocess, click_id, r$step_id,
+            label = pv_na_default(r$label, r$step_id), selector = r$selector, kind = r$kind,
+            feature = pv_na_default(r$feature, r$step_id), event = r$event, weight = r$weight
           )
         }
-        shiny::showNotification(paste0("Saved ", nrow(to_save), " activity(ies)"), type = "message")
+        shiny::showNotification(paste0("Saved ", nrow(to_save), " click(s)"), type = "message")
         touch()
       })
     })
@@ -295,31 +396,32 @@ pv_registry_editor_scan_server <- function(id, registry_path, registry, touch) {
 }
 
 ## -------------------------------------------------------------------------
-## Tab 3: Variants & outcomes (per app)
+## Tab 4: Steps & outcomes (per app)
 ## -------------------------------------------------------------------------
 
 #' @noRd
-pv_registry_editor_ideal_ui <- function(id) {
+pv_registry_editor_steps_ui <- function(id) {
   ns <- shiny::NS(id)
   shiny::fluidRow(
     shiny::column(
       4,
       bslib::card(
         bslib::card_header("App"),
-        shiny::selectInput(ns("subprocess"), "App (subprocess)", choices = NULL)
+        shiny::selectInput(ns("subprocess"), "App", choices = NULL)
       ),
       bslib::card(
-        bslib::card_header("Add a variant"),
-        shiny::helpText("Comma-separated activity ids, in order, e.g. a, b, c"),
-        shiny::textInput(ns("variant_ids"), "Activity id sequence"),
-        shiny::actionButton(ns("add_variant"), "Add variant", class = "btn-primary")
+        bslib::card_header("Add an allowed transition"),
+        shiny::helpText("Cycles are allowed -- e.g. a step that loops back for rework."),
+        shiny::selectInput(ns("from_step"), "From step", choices = NULL),
+        shiny::selectInput(ns("to_step"), "To step", choices = NULL),
+        shiny::actionButton(ns("add_edge"), "Add transition", class = "btn-primary")
       ),
       bslib::card(
         bslib::card_header("Add an outcome"),
         shiny::textInput(ns("outcome_id"), "outcome_id"),
         shiny::textInput(ns("outcome_label"), "label"),
         shiny::selectInput(ns("outcome_kind"), "kind", c("deliverable", "decision")),
-        shiny::selectInput(ns("outcome_activity"), "activity_id", choices = NULL),
+        shiny::selectInput(ns("outcome_step"), "concluded by step", choices = NULL),
         shiny::selectInput(ns("outcome_tier"), "tier (decisions only)", c("", "operational", "tactical", "strategic")),
         shiny::textInput(ns("tracking_app"), "outcome_tracking_app (optional)"),
         shiny::textInput(ns("tracking_key"), "outcome_tracking_join_key (optional)"),
@@ -328,15 +430,15 @@ pv_registry_editor_ideal_ui <- function(id) {
     ),
     shiny::column(
       8,
-      bslib::card(bslib::card_header("Activities"), DT::DTOutput(ns("activities_table"))),
-      bslib::card(bslib::card_header("Variants"), shiny::uiOutput(ns("variants_list"))),
+      bslib::card(bslib::card_header("Steps"), DT::DTOutput(ns("steps_table"))),
+      bslib::card(bslib::card_header("Declared transitions"), DT::DTOutput(ns("edges_table"))),
       bslib::card(bslib::card_header("Outcomes"), DT::DTOutput(ns("outcomes_table")))
     )
   )
 }
 
 #' @noRd
-pv_registry_editor_ideal_server <- function(id, registry_path, registry, touch) {
+pv_registry_editor_steps_server <- function(id, registry_path, registry, touch) {
   shiny::moduleServer(id, function(input, output, session) {
     shiny::observe({
       subs <- registry()$subprocesses
@@ -344,125 +446,62 @@ pv_registry_editor_ideal_server <- function(id, registry_path, registry, touch) 
       shiny::updateSelectInput(session, "subprocess", choices = choices)
     })
 
-    ideal <- shiny::reactive({
+    pids <- shiny::reactive({
       shiny::req(input$subprocess)
-      process_id <- registry()$subprocesses$process_id[registry()$subprocesses$subprocess == input$subprocess][1]
-      list(process_id = process_id, ip = registry()$ideal[[paste(process_id, input$subprocess, sep = "::")]])
+      registry()$subprocesses$process_id[registry()$subprocesses$subprocess == input$subprocess][1]
+    })
+
+    diagram <- shiny::reactive({
+      shiny::req(input$subprocess)
+      registry()$subprocess_diagrams[[paste(pids(), input$subprocess, sep = "::")]]
     })
 
     shiny::observe({
-      acts <- ideal()$ip$activities
-      choices <- if (is.null(acts)) character(0) else acts$id
-      shiny::updateSelectInput(session, "outcome_activity", choices = choices)
+      steps <- diagram()$steps
+      choices <- if (is.null(steps)) character(0) else stats::setNames(steps$id, steps$label)
+      shiny::updateSelectInput(session, "from_step", choices = choices)
+      shiny::updateSelectInput(session, "to_step", choices = choices)
+      shiny::updateSelectInput(session, "outcome_step", choices = choices)
     })
 
-    output$activities_table <- DT::renderDT({
-      acts <- ideal()$ip$activities
-      shiny::validate(shiny::need(!is.null(acts) && nrow(acts) > 0, "No activities declared for this app yet -- use Scan & map activities."))
-      DT::datatable(acts, rownames = FALSE, options = list(pageLength = 10, dom = "tp"), class = "compact stripe")
+    output$steps_table <- DT::renderDT({
+      steps <- diagram()$steps
+      shiny::validate(shiny::need(!is.null(steps) && nrow(steps) > 0, "No steps declared for this app yet -- use Scan & map steps."))
+      DT::datatable(steps, rownames = FALSE, options = list(pageLength = 10, dom = "tp"), class = "compact stripe")
     })
 
-    output$variants_list <- shiny::renderUI({
-      v <- ideal()$ip$variants
-      if (is.null(v) || length(v) == 0) return(shiny::p(class = "text-muted", "No variants declared yet."))
-      shiny::tags$ol(lapply(v, function(seq) shiny::tags$li(paste(seq, collapse = " -> "))))
+    output$edges_table <- DT::renderDT({
+      edges <- diagram()$edges
+      shiny::validate(shiny::need(!is.null(edges) && nrow(edges) > 0, "No transitions declared yet."))
+      DT::datatable(edges, rownames = FALSE, options = list(pageLength = 10, dom = "tp"), class = "compact stripe")
     })
 
     output$outcomes_table <- DT::renderDT({
-      oc <- ideal()$ip$outcomes
+      oc <- diagram()$outcomes
       shiny::validate(shiny::need(!is.null(oc) && nrow(oc) > 0, "No outcomes declared yet."))
       DT::datatable(oc, rownames = FALSE, options = list(pageLength = 10, dom = "tp"), class = "compact stripe")
     })
 
-    shiny::observeEvent(input$add_variant, {
+    shiny::observeEvent(input$add_edge, {
       pv_registry_editor_notify_error({
-        shiny::req(input$subprocess, input$variant_ids)
-        ids <- trimws(strsplit(input$variant_ids, ",")[[1]])
-        ids <- ids[nzchar(ids)]
-        shiny::req(length(ids) > 0)
-        pv_registry_db_insert_variant(registry_path, ideal()$process_id, input$subprocess, ids)
-        shiny::showNotification("Added variant", type = "message")
+        shiny::req(input$subprocess, input$from_step, input$to_step)
+        pv_registry_db_insert_step_edge(registry_path, pids(), input$subprocess, input$from_step, input$to_step)
+        shiny::showNotification("Added transition", type = "message")
         touch()
       })
     })
 
     shiny::observeEvent(input$add_outcome, {
       pv_registry_editor_notify_error({
-        shiny::req(input$subprocess, input$outcome_id, input$outcome_label, input$outcome_activity)
-        pv_registry_db_upsert_outcome(
-          registry_path, ideal()$process_id, input$subprocess, input$outcome_id, input$outcome_label,
-          input$outcome_kind, input$outcome_activity,
+        shiny::req(input$subprocess, input$outcome_id, input$outcome_label, input$outcome_step)
+        pv_registry_db_upsert_subprocess_outcome(
+          registry_path, pids(), input$subprocess, input$outcome_id, input$outcome_label,
+          input$outcome_kind, input$outcome_step,
           tier = if (nzchar(input$outcome_tier)) input$outcome_tier else NA_character_,
           outcome_tracking_app = if (nzchar(input$tracking_app)) input$tracking_app else NA_character_,
           outcome_tracking_join_key = if (nzchar(input$tracking_key)) input$tracking_key else NA_character_
         )
         shiny::showNotification(paste0("Added outcome '", input$outcome_id, "'"), type = "message")
-        touch()
-      })
-    })
-  })
-}
-
-## -------------------------------------------------------------------------
-## Tab 4: Business-level step flow
-## -------------------------------------------------------------------------
-
-#' @noRd
-pv_registry_editor_stepflow_ui <- function(id) {
-  ns <- shiny::NS(id)
-  shiny::fluidRow(
-    shiny::column(
-      4,
-      bslib::card(
-        bslib::card_header("Process"),
-        shiny::selectInput(ns("process_id"), "process_id", choices = NULL)
-      ),
-      bslib::card(
-        bslib::card_header("Add a step_variant"),
-        shiny::helpText("Comma-separated step slugs, in order, e.g. draft, review"),
-        shiny::textInput(ns("step_seq"), "Step sequence"),
-        shiny::actionButton(ns("add_step_variant"), "Add step_variant", class = "btn-primary")
-      )
-    ),
-    shiny::column(
-      8,
-      bslib::card(bslib::card_header("Declared steps, in order"), DT::DTOutput(ns("steps_table"))),
-      bslib::card(bslib::card_header("Declared step_variants"), shiny::uiOutput(ns("step_variants_list")))
-    )
-  )
-}
-
-#' @noRd
-pv_registry_editor_stepflow_server <- function(id, registry_path, registry, touch) {
-  shiny::moduleServer(id, function(input, output, session) {
-    shiny::observe({
-      ids <- stats::setNames(registry()$processes$process_id, registry()$processes$process)
-      shiny::updateSelectInput(session, "process_id", choices = ids)
-    })
-
-    output$steps_table <- DT::renderDT({
-      shiny::req(input$process_id)
-      steps <- registry()$steps[registry()$steps$process_id == input$process_id, ]
-      DT::datatable(steps, rownames = FALSE, options = list(pageLength = 10, dom = "tp"), class = "compact stripe")
-    })
-
-    output$step_variants_list <- shiny::renderUI({
-      shiny::req(input$process_id)
-      v <- registry()$step_variants[[input$process_id]]
-      if (is.null(v) || length(v) == 0) {
-        return(shiny::p(class = "text-muted", "None declared -- falls back to the step_order sequence."))
-      }
-      shiny::tags$ol(lapply(v, function(seq) shiny::tags$li(paste(seq, collapse = " -> "))))
-    })
-
-    shiny::observeEvent(input$add_step_variant, {
-      pv_registry_editor_notify_error({
-        shiny::req(input$process_id, input$step_seq)
-        steps <- trimws(strsplit(input$step_seq, ",")[[1]])
-        steps <- steps[nzchar(steps)]
-        shiny::req(length(steps) > 0)
-        pv_registry_db_insert_step_variant(registry_path, input$process_id, steps)
-        shiny::showNotification("Added step_variant", type = "message")
         touch()
       })
     })

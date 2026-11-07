@@ -2,10 +2,10 @@
 % Please edit documentation in R/mod_business_detail.R
 \name{mod_business_detail_ui}
 \alias{mod_business_detail_ui}
-\title{Business process detail tab: the business process's own step flow,
-which step is monitored, per-app metrics, and business-level process
-mining (process mining applied at step granularity -- see
-\code{\link[=pv_pull_business_events]{pv_pull_business_events()}}/\code{\link[=pv_step_sequence]{pv_step_sequence()}}).}
+\title{Business process detail tab: which apps make up this process, their
+own metrics, and the business-level outcome (decided by whichever
+app(s) sit at the end of the process's declared flow -- see
+\code{\link[=pv_final_subprocesses]{pv_final_subprocesses()}}).}
 \usage{
 mod_business_detail_ui(id)
 }
@@ -13,8 +13,9 @@ mod_business_detail_ui(id)
 \item{id}{module id.}
 }
 \description{
-Business process detail tab: the business process's own step flow,
-which step is monitored, per-app metrics, and business-level process
-mining (process mining applied at step granularity -- see
-\code{\link[=pv_pull_business_events]{pv_pull_business_events()}}/\code{\link[=pv_step_sequence]{pv_step_sequence()}}).
+There is no single process-map/variant-sequence view at this level
+any more: each app has its own step vocabulary (\code{"validate"},
+\code{"setting params"}, ...), not shared across apps the way a business
+process's \code{step} grouping used to be, so that detail lives on the app
+detail tab instead -- this tab is the roll-up across apps.
 }

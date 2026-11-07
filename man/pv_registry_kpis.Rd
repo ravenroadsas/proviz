@@ -4,26 +4,22 @@
 \alias{pv_registry_kpis}
 \title{KPI grid for every instrumented business process in the registry}
 \usage{
-pv_registry_kpis(pv_con, registry)
+pv_registry_kpis(registry)
 }
 \arguments{
-\item{pv_con}{a \code{\link[=pv_connect_registry]{pv_connect_registry()}} result.}
-
-\item{registry}{the same \code{\link[=pv_load_registry]{pv_load_registry()}} result \code{pv_con} was built
-from.}
+\item{registry}{a \code{\link[=pv_load_registry]{pv_load_registry()}} result.}
 }
 \value{
-\code{registry$processes} with added columns: \code{n_steps},
-\code{n_steps_monitored}, \code{steps_pct}, \code{n_cases}, \code{n_users},
+\code{registry$processes} with added columns: \code{n_apps},
+\code{n_apps_monitored}, \code{apps_pct}, \code{n_cases}, \code{n_users},
 \code{median_duration_mins}, \code{conformance_median}, \code{completion_pct}.
 }
 \description{
 The portfolio overview tab's main table: one row per registered
-business process, joined with live business-level KPIs for the ones
-that are actually instrumented (\code{NA} KPI columns for
-\code{designed}/\code{not_started}/\code{deprecated} rows -- there is nothing to
-compute yet). \code{conformance_median} is business-level (step-order)
-conformance, from \code{\link[=pv_business_process_conformance]{pv_business_process_conformance()}} -- not any one
-app's own activity-level conformance, which belongs on the app-detail
-tab instead.
+business process, joined with live KPIs for the ones that are
+actually instrumented. \code{conformance_median} is each process's own
+subprocesses' step-level conformance medians, averaged -- not a
+cross-app business-flow check (this log shape carries no cross-app
+case identity to check that against; see
+\code{\link[=pv_process_outcome_distribution]{pv_process_outcome_distribution()}}'s docs for the same limitation).
 }

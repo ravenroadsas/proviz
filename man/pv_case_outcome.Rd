@@ -2,16 +2,22 @@
 % Please edit documentation in R/pv_outcomes.R
 \name{pv_case_outcome}
 \alias{pv_case_outcome}
-\title{Which named outcome(s) a case's trace reached}
+\title{Which named outcome(s) a trace reached}
 \usage{
-pv_case_outcome(trace, outcomes)
+pv_case_outcome(trace, outcomes, node_col = "step_id")
 }
 \arguments{
-\item{trace}{character vector: one case's activity ids, in the order
-they occurred.}
+\item{trace}{character vector: one case's node ids (steps, or
+subprocesses at process level), in the order they occurred.}
 
-\item{outcomes}{an \code{outcomes} data.frame from a \code{\link[=pv_load_ideal_process]{pv_load_ideal_process()}}
-result (zero rows is fine -- every case is then \code{"incomplete"}).}
+\item{outcomes}{an outcomes \code{data.frame} from a \code{\link[=pv_load_registry]{pv_load_registry()}}
+diagram (\verb{$subprocess_diagrams[[key]]$outcomes} or
+\verb{$process_diagrams[[pid]]$outcomes}) -- zero rows is fine (every
+case is then \code{"incomplete"}).}
+
+\item{node_col}{the column in \code{outcomes} naming which node concludes
+it -- \code{"step_id"} (subprocess-level outcomes, the default) or
+\code{"subprocess"} (process-level outcomes).}
 }
 \value{
 a list: \code{outcome_ids} (character vector, in the order they
@@ -20,9 +26,8 @@ occurred in the trace; length 0 if none fired), \code{status}
 }
 \description{
 A case can reach zero outcomes (nothing terminal logged yet --
-\code{"incomplete"}), exactly one, or (for an \code{outcome_exclusivity = "multi"}
-process) more than one -- e.g. a workover proposal logged alongside an
-escalation. Matching is by activity id present anywhere in the trace,
-not position, since a wrap-up step (a report signoff) can legitimately
-come after the decision it documents.
+\code{"incomplete"}), exactly one, or (for an \code{outcome_exclusivity}-free
+model, more than one is always allowed here) more than one. Matching
+is by node id present anywhere in the trace, not position, since a
+wrap-up step can legitimately come after the decision it documents.
 }

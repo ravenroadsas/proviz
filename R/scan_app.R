@@ -6,10 +6,9 @@
 #' label), every `downloadHandler`, every navigation tab title, and every
 #' `moduleServer()` boundary, across every `.R` file under `path`. It never
 #' decides what any of this *means* for a business process -- that's the
-#' human mapping step (see protrace's process mining playbook, step 3).
-#' The output is meant to be exported (`write.csv()`/an xlsx writer) and
-#' annotated by hand, turning "read this codebase cold" into "fill in two
-#' blank columns."
+#' human mapping step (see [run_registry_editor()]'s "Scan & map steps"
+#' tab). The output is meant to be reviewed and annotated by hand,
+#' turning "read this codebase cold" into "fill in two blank columns."
 #'
 #' Deliberately does not try to be a complete R static analyzer. Known,
 #' accepted blind spots (see the `note` column on affected rows and
@@ -54,7 +53,8 @@
 #'       string (computed at runtime) -- see Details}
 #'     \item{suggested_debounce}{for `kind == "ui_widget"`: a heuristic
 #'       guess (by widget type) at whether settling this input should be
-#'       debounced before logging it -- see `protrace::pt_debounced_event()`}
+#'       debounced before the recorder logs it (a continuous input like a
+#'       slider firing on every drag tick vs. a discrete click)}
 #'     \item{nearby_comment}{the comment block immediately preceding this
 #'       line, if any -- often already states business intent}
 #'     \item{activity_id, notes}{blank; for the human mapping step}

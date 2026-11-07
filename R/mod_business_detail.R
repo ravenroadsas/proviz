@@ -1,29 +1,23 @@
-#' One step's flow card: its label/order plus each of its app(s),
-#' monitored or not -- the "which step is monitored" view the business
-#' detail tab leads with.
+#' One app's flow card within a business process's app list.
 #' @noRd
-pv_step_flow_card <- function(step_row, apps) {
-  app_rows <- lapply(seq_len(nrow(apps)), function(i) {
-    shiny::div(
-      style = "display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; padding: 0.15rem 0;",
-      shiny::span(apps$app[i], style = "font-size: 0.82rem;"),
-      shiny::HTML(pv_monitored_badge(!is.na(apps$duckdb_path[i])))
-    )
-  })
+pv_app_flow_card <- function(sub_row) {
   shiny::div(
     style = "flex: 1 1 200px; background: #fff; border: 1px solid #e1e0d9; border-radius: 0.5rem; padding: 0.7rem 0.9rem;",
-    shiny::div(
-      style = "font-weight: 600; font-size: 0.85rem; margin-bottom: 0.4rem;",
-      sprintf("%d. %s", step_row$step_order, step_row$step_label)
-    ),
-    app_rows
+    shiny::div(style = "font-weight: 600; font-size: 0.85rem; margin-bottom: 0.3rem;", sub_row$app),
+    shiny::HTML(pv_monitored_badge(!is.na(sub_row$log_path)))
   )
 }
 
-#' Business process detail tab: the business process's own step flow,
-#' which step is monitored, per-app metrics, and business-level process
-#' mining (process mining applied at step granularity -- see
-#' [pv_pull_business_events()]/[pv_step_sequence()]).
+#' Business process detail tab: which apps make up this process, their
+#' own metrics, and the business-level outcome (decided by whichever
+#' app(s) sit at the end of the process's declared flow -- see
+#' [pv_final_subprocesses()]).
+#'
+#' There is no single process-map/variant-sequence view at this level
+#' any more: each app has its own step vocabulary (`"validate"`,
+#' `"setting params"`, ...), not shared across apps the way a business
+#' process's `step` grouping used to be, so that detail lives on the app
+#' detail tab instead -- this tab is the roll-up across apps.
 #'
 #' @param id module id.
 #' @export
@@ -35,37 +29,36 @@ mod_business_detail_ui <- function(id) {
       bslib::card_body(
         style = "padding-bottom: 4px;",
         shiny::fluidRow(
-          shiny::column(3, shiny::selectInput(ns("process_picker"), "Business process", choices = NULL, width = "100%")),
-          shiny::column(3, shiny::dateRangeInput(ns("date_range"), "Case start date range", width = "100%")),
-          shiny::column(3, shiny::selectizeInput(ns("role_filter"), "Roles", choices = NULL, multiple = TRUE, width = "100%")),
-          shiny::column(3, shiny::selectizeInput(ns("user_filter"), "Users", choices = NULL, multiple = TRUE, width = "100%"))
+          shiny::column(4, shiny::selectInput(ns("process_picker"), "Business process", choices = NULL, width = "100%")),
+          shiny::column(4, shiny::dateRangeInput(ns("date_range"), "Case start date range", width = "100%")),
+          shiny::column(4, shiny::selectizeInput(ns("user_filter"), "Users", choices = NULL, multiple = TRUE, width = "100%"))
         )
       )
     ),
     shiny::uiOutput(ns("no_data_note")),
     bslib::card(
       fill = FALSE,
-      bslib::card_header("Step flow"),
-      shiny::div(style = "display: flex; flex-wrap: wrap; gap: 0.6rem;", shiny::uiOutput(ns("step_flow")))
+      bslib::card_header("Apps in this process"),
+      shiny::div(style = "display: flex; flex-wrap: wrap; gap: 0.6rem;", shiny::uiOutput(ns("app_flow")))
     ),
     shiny::div(
       class = "pv-kpi-row",
       pv_kpi_box("Cases", shiny::textOutput(ns("kpi_cases"), inline = TRUE), shiny::icon("diagram-project")),
       pv_kpi_box("Median duration", shiny::textOutput(ns("kpi_duration"), inline = TRUE), shiny::icon("clock")),
       pv_kpi_box("Users", shiny::textOutput(ns("kpi_users"), inline = TRUE), shiny::icon("users")),
-      pv_kpi_box("Business conformance", shiny::textOutput(ns("kpi_conformance"), inline = TRUE), shiny::icon("check-double")),
+      pv_kpi_box("Mean app conformance", shiny::textOutput(ns("kpi_conformance"), inline = TRUE), shiny::icon("check-double")),
       pv_kpi_box("Completed", shiny::textOutput(ns("kpi_completion"), inline = TRUE), shiny::icon("circle-check"))
     ),
     shiny::helpText(
-      "Conformance and the process map below score each case's trace of ",
-      "*steps* against the business process's declared step order -- not any one app's own activities (see the app detail tab for that)."
+      "\"Mean app conformance\" averages each app's own step-level conformance (see the app detail tab) -- ",
+      "there is no single cross-app case identity in the event log to score a whole business-process walk against."
     ),
     bslib::card(
       fill = FALSE,
       bslib::card_header("Outcomes"),
       shiny::helpText(
         style = "padding: 0 0.95rem;",
-        "How this business process ended, as decided by the app(s) in its final step."
+        "How this business process ended, as decided by the app(s) at the end of its declared flow."
       ),
       DT::DTOutput(ns("outcomes_table"), fill = FALSE)
     ),
@@ -81,29 +74,6 @@ mod_business_detail_ui <- function(id) {
           style = "margin-left: 8px; color: #868e96; font-size: 0.85em;"
         )
       )
-    ),
-    bslib::card(
-      fill = FALSE,
-      bslib::card_header(
-        shiny::div(
-          style = "display: flex; justify-content: space-between; align-items: center;",
-          "Business process map (step granularity)",
-          shiny::radioButtons(ns("map_type"), NULL, c("Frequency" = "freq", "Performance" = "perf"),
-            inline = TRUE, width = "auto"
-          )
-        )
-      ),
-      shiny::uiOutput(ns("process_map"))
-    ),
-    bslib::card(
-      fill = FALSE,
-      bslib::card_header("Step-sequence variants"),
-      DT::DTOutput(ns("variant_table"), fill = FALSE)
-    ),
-    bslib::layout_column_wrap(
-      width = 1 / 2, fill = FALSE,
-      bslib::card(fill = FALSE, bslib::card_header("Case duration distribution"), plotly::plotlyOutput(ns("duration_plot"), height = "280px", fill = FALSE)),
-      bslib::card(fill = FALSE, bslib::card_header("Usage per week"), plotly::plotlyOutput(ns("weekly_plot"), height = "280px", fill = FALSE))
     )
   )
 }
@@ -111,15 +81,16 @@ mod_business_detail_ui <- function(id) {
 #' Server logic for the business process detail tab
 #'
 #' @param id module id.
-#' @param pv_con a reactive returning the current [pv_connect_registry()] result.
 #' @param registry a reactive returning the current [pv_load_registry()] result.
 #' @param selected_process a reactive giving a `process_id` to jump to (e.g.
 #'   from [mod_overview_server()]'s "Open business process"), or `NULL`.
+#' @param refresh a reactive (any value) bumped whenever logs should be
+#'   re-read.
 #' @return a list: `selected_app`, a reactive giving `list(process_id, subprocess)`
 #'   for the app detail tab to jump to (`NULL` until a row's "Open app detail"
 #'   is clicked).
 #' @export
-mod_business_detail_server <- function(id, pv_con, registry, selected_process) {
+mod_business_detail_server <- function(id, registry, selected_process, refresh = shiny::reactive(NULL)) {
   shiny::moduleServer(id, function(input, output, session) {
     process_choices <- shiny::reactive({
       shiny::req(registry())
@@ -139,79 +110,68 @@ mod_business_detail_server <- function(id, pv_con, registry, selected_process) {
       shiny::updateSelectInput(session, "process_picker", selected = selected_process())
     })
 
-    steps <- shiny::reactive({
+    process_subs <- shiny::reactive({
       shiny::req(input$process_picker, registry())
-      s <- registry()$steps[registry()$steps$process_id == input$process_picker, ]
-      s[order(s$step_order), ]
+      registry()$subprocesses[registry()$subprocesses$process_id == input$process_picker, ]
     })
 
-    raw_business_events <- shiny::reactive({
-      shiny::req(input$process_picker, pv_con(), registry())
-      pv_pull_business_events(pv_con(), registry(), input$process_picker)
-    })
-
-    business_ideal <- shiny::reactive({
+    raw_process_log <- shiny::reactive({
+      refresh()
       shiny::req(input$process_picker, registry())
-      pv_step_sequence(registry(), input$process_picker)
+      pv_pull_process_log(registry(), input$process_picker)
     })
 
-    shiny::observeEvent(raw_business_events(), {
-      events <- raw_business_events()
-      if (nrow(events) == 0) {
+    shiny::observeEvent(raw_process_log(), {
+      log <- raw_process_log()
+      if (nrow(log) == 0) {
         return()
       }
-      rng <- range(as.Date(events$timestamp))
+      rng <- range(as.Date(log$started_at))
       shiny::updateDateRangeInput(session, "date_range", start = rng[1], end = rng[2], min = rng[1], max = rng[2])
-      shiny::updateSelectizeInput(session, "role_filter",
-        choices = sort(unique(stats::na.omit(events$role))), selected = character(0)
-      )
       shiny::updateSelectizeInput(session, "user_filter",
-        choices = sort(unique(stats::na.omit(events$user_id))), selected = character(0)
+        choices = sort(unique(stats::na.omit(log$user_id))), selected = character(0)
       )
     })
 
-    filtered_business_events <- shiny::reactive({
-      events <- raw_business_events()
+    filtered_process_log <- shiny::reactive({
+      log <- raw_process_log()
       shiny::req(input$date_range)
-      pv_filter_events(events,
-        start_date = input$date_range[1], end_date = input$date_range[2],
-        roles = input$role_filter, users = input$user_filter
+      pv_filter_log(log, start_date = input$date_range[1], end_date = input$date_range[2], users = input$user_filter)
+    })
+
+    kpis <- shiny::reactive({
+      log <- filtered_process_log()
+      subs <- process_subs()
+      conf_medians <- vapply(subs$subprocess, function(sp) {
+        conf <- pv_subprocess_conformance(registry(), input$process_picker, sp, log = log[log$subprocess == sp, ])
+        if (nrow(conf) == 0) NA_real_ else stats::median(conf$score, na.rm = TRUE)
+      }, numeric(1))
+      list(
+        n_cases = if (nrow(log) == 0) 0L else length(unique(log$session_id)),
+        n_users = if (nrow(log) == 0) 0L else length(unique(log$user_id)),
+        median_duration_mins = if (nrow(log) == 0) NA_real_ else stats::median(pv_case_durations(log)$duration_mins, na.rm = TRUE),
+        conformance_median = if (length(conf_medians) == 0 || all(is.na(conf_medians))) NA_real_ else mean(conf_medians, na.rm = TRUE)
       )
     })
 
-    final_step_events <- shiny::reactive({
-      shiny::req(input$process_picker, pv_con(), registry(), input$date_range)
-      raw <- pv_pull_final_step_events(pv_con(), registry(), input$process_picker)
-      pv_filter_events(raw,
-        start_date = input$date_range[1], end_date = input$date_range[2],
-        roles = input$role_filter, users = input$user_filter
-      )
-    })
-
-    kpis <- shiny::reactive(pv_process_kpis(filtered_business_events(), business_ideal()))
     completion <- shiny::reactive({
-      shiny::req(input$process_picker, pv_con(), registry())
-      pv_business_outcome_distribution(pv_con(), registry(), input$process_picker, events = final_step_events())
+      shiny::req(input$process_picker, registry())
+      pv_process_outcome_distribution(registry(), input$process_picker)
     })
 
     output$no_data_note <- shiny::renderUI({
       shiny::req(input$process_picker)
-      if (nrow(raw_business_events()) == 0) {
+      if (nrow(raw_process_log()) == 0) {
         bslib::card(
           bslib::card_body("No events logged yet for this business process.", class = "text-muted")
         )
       }
     })
 
-    output$step_flow <- shiny::renderUI({
-      s <- steps()
-      shiny::validate(shiny::need(nrow(s) > 0, "No steps declared for this business process yet."))
-      subs <- registry()$subprocesses[registry()$subprocesses$process_id == input$process_picker, ]
-      lapply(seq_len(nrow(s)), function(i) {
-        apps <- subs[subs$step == s$step[i], ]
-        apps <- apps[order(apps$app_order), ]
-        pv_step_flow_card(s[i, ], apps)
-      })
+    output$app_flow <- shiny::renderUI({
+      subs <- process_subs()
+      shiny::validate(shiny::need(nrow(subs) > 0, "No apps scoped for this business process yet."))
+      lapply(seq_len(nrow(subs)), function(i) pv_app_flow_card(subs[i, ]))
     })
 
     output$kpi_cases <- shiny::renderText(as.character(kpis()$n_cases))
@@ -233,38 +193,29 @@ mod_business_detail_server <- function(id, pv_con, registry, selected_process) {
 
     output$outcomes_table <- DT::renderDT({
       dist <- completion()
-      shiny::validate(shiny::need(nrow(dist) > 0, "No outcomes declared for this business process's final step yet."))
+      shiny::validate(shiny::need(nrow(dist) > 0, "No outcomes declared for this business process's final app(s) yet."))
       DT::datatable(
         pv_outcomes_display_table(dist),
         rownames = FALSE, escape = FALSE, options = list(dom = "t"), class = "compact stripe"
       )
     })
 
-    app_metrics_subs <- shiny::reactive({
-      shiny::req(input$process_picker, registry())
-      subs <- registry()$subprocesses[registry()$subprocesses$process_id == input$process_picker, ]
-      subs[order(subs$step_order, subs$app_order), ]
-    })
-
     output$app_metrics_table <- DT::renderDT({
       pid <- input$process_picker
-      subs <- app_metrics_subs()
+      subs <- process_subs()
       shiny::validate(shiny::need(nrow(subs) > 0, "No apps scoped for this business process yet."))
 
       rows <- lapply(seq_len(nrow(subs)), function(i) {
-        monitored <- !is.na(subs$duckdb_path[i])
+        monitored <- !is.na(subs$log_path[i])
         app_kpis <- list(n_cases = NA_integer_, n_users = NA_integer_, median_duration_mins = NA_real_, conformance_median = NA_real_)
         if (monitored) {
-          events <- pv_pull_app_events(pv_con(), registry(), pid, subs$subprocess[i])
-          events <- pv_filter_events(events,
-            start_date = input$date_range[1], end_date = input$date_range[2],
-            roles = input$role_filter, users = input$user_filter
-          )
-          app_ideal <- registry()$ideal[[paste(pid, subs$subprocess[i], sep = "::")]]
-          app_kpis <- pv_process_kpis(events, app_ideal)
+          log <- pv_pull_subprocess_log(registry(), pid, subs$subprocess[i])
+          log <- pv_filter_log(log, start_date = input$date_range[1], end_date = input$date_range[2], users = input$user_filter)
+          diagram <- registry()$subprocess_diagrams[[paste(pid, subs$subprocess[i], sep = "::")]]
+          app_kpis <- pv_process_kpis(log, diagram)
         }
         data.frame(
-          Step = subs$step_label[i], App = subs$app[i],
+          App = subs$app[i],
           Monitored = pv_monitored_badge(monitored),
           Cases = ifelse(is.na(app_kpis$n_cases), "--", as.character(app_kpis$n_cases)),
           Users = ifelse(is.na(app_kpis$n_users), "--", as.character(app_kpis$n_users)),
@@ -282,68 +233,8 @@ mod_business_detail_server <- function(id, pv_con, registry, selected_process) {
     selected_app <- shiny::eventReactive(input$open_app_detail, {
       row <- input$app_metrics_table_rows_selected
       shiny::req(row)
-      subs <- app_metrics_subs()
+      subs <- process_subs()
       list(process_id = input$process_picker, subprocess = subs$subprocess[row])
-    })
-
-    output$process_map <- shiny::renderUI({
-      events <- filtered_business_events()
-      shiny::validate(shiny::need(nrow(events) > 0, "No events in range."))
-      el <- pv_build_eventlog(events)
-      pm <- if (input$map_type == "perf") {
-        processmapR::process_map(el,
-          type_nodes = processmapR::performance(FUN = stats::median, units = "mins"),
-          type_edges = processmapR::performance(FUN = stats::median, units = "mins")
-        )
-      } else {
-        processmapR::process_map(el,
-          type_nodes = processmapR::frequency("absolute"),
-          type_edges = processmapR::frequency("absolute")
-        )
-      }
-      pm
-    })
-
-    output$variant_table <- DT::renderDT({
-      variants <- pv_variant_table(filtered_business_events(), business_ideal())
-      conformance_pct <- round(100 * variants$mean_conformance)
-      variants$pct <- vapply(seq_len(nrow(variants)), function(i) {
-        pv_cell_bar(paste0(variants$pct[i], "%"), variants$pct[i])
-      }, character(1))
-      variants$mean_conformance <- vapply(seq_len(nrow(variants)), function(i) {
-        label <- if (is.na(conformance_pct[i])) NA_character_ else paste0(conformance_pct[i], "%")
-        pv_cell_bar(label, conformance_pct[i])
-      }, character(1))
-      DT::datatable(
-        variants,
-        colnames = c("Step sequence", "Cases", "Share", "Conformance"),
-        rownames = FALSE, escape = FALSE, options = list(pageLength = 5, dom = "tp"),
-        class = "compact stripe"
-      )
-    })
-
-    output$duration_plot <- plotly::renderPlotly({
-      durations <- pv_case_durations(filtered_business_events())
-      shiny::validate(shiny::need(nrow(durations) > 0, "No data."))
-      med <- stats::median(durations$duration_mins)
-      plotly::plot_ly(durations, x = ~duration_mins, type = "histogram", marker = list(color = .pv_accent)) |>
-        plotly::layout(
-          xaxis = list(title = "Duration (minutes)"), yaxis = list(title = "Cases"),
-          shapes = list(list(
-            type = "line", x0 = med, x1 = med, y0 = 0, y1 = 1, yref = "paper",
-            line = list(color = .pv_ink_secondary, dash = "dash")
-          ))
-        )
-    })
-
-    output$weekly_plot <- plotly::renderPlotly({
-      weekly <- pv_weekly_usage(filtered_business_events())
-      shiny::validate(shiny::need(nrow(weekly) > 0, "No data."))
-      plotly::plot_ly(weekly,
-        x = ~week_start, y = ~n_cases, type = "scatter", mode = "lines+markers",
-        line = list(color = .pv_accent), marker = list(color = .pv_accent)
-      ) |>
-        plotly::layout(xaxis = list(title = "Week"), yaxis = list(title = "Cases started"))
     })
 
     list(selected_app = selected_app)

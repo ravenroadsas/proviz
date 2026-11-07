@@ -2,23 +2,23 @@
 % Please edit documentation in R/pv_kpis.R
 \name{pv_process_kpis}
 \alias{pv_process_kpis}
-\title{Core KPI set for one process (one filtered slice of its events)}
+\title{Core KPI set for one subprocess's (already filtered) log}
 \usage{
-pv_process_kpis(events, ideal_process = NULL)
+pv_process_kpis(log, diagram = NULL)
 }
 \arguments{
-\item{events}{a case-linked, already-filtered events \code{data.frame} (see
-\code{\link[=pv_filter_events]{pv_filter_events()}}).}
+\item{log}{a \code{\link[=pv_pull_subprocess_log]{pv_pull_subprocess_log()}} result (optionally filtered,
+see \code{\link[=pv_filter_log]{pv_filter_log()}}).}
 
-\item{ideal_process}{a \code{\link[=pv_load_ideal_process]{pv_load_ideal_process()}} result, or \code{NULL} to
-skip the conformance KPI (e.g. a process with no ideal-process
-definition on file yet).}
+\item{diagram}{a \verb{$subprocess_diagrams[[key]]} entry (or \code{NULL} to
+skip the conformance KPI, e.g. a subprocess with no declared steps
+yet).}
 }
 \value{
 a list: \code{n_cases}, \code{n_users}, \code{median_duration_mins},
-\code{mean_duration_mins}, \code{conformance_median} (\code{NA} if \code{ideal_process}
-is \code{NULL} or there are no cases).
+\code{mean_duration_mins}, \code{conformance_median} (\code{NA} if \code{diagram} is
+\code{NULL} or there are no cases).
 }
 \description{
-Core KPI set for one process (one filtered slice of its events)
+Core KPI set for one subprocess's (already filtered) log
 }

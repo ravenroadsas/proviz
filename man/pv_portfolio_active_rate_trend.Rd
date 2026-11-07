@@ -4,11 +4,9 @@
 \alias{pv_portfolio_active_rate_trend}
 \title{Portfolio-wide weekly active-rate trend}
 \usage{
-pv_portfolio_active_rate_trend(pv_con, registry, adoption)
+pv_portfolio_active_rate_trend(registry, adoption)
 }
 \arguments{
-\item{pv_con}{a \code{\link[=pv_connect_registry]{pv_connect_registry()}} result.}
-
 \item{registry}{a \code{\link[=pv_load_registry]{pv_load_registry()}} result.}
 
 \item{adoption}{a \code{\link[=pv_load_adoption]{pv_load_adoption()}} result.}

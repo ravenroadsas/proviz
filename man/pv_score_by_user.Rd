@@ -4,14 +4,16 @@
 \alias{pv_score_by_user}
 \title{Total engagement score per user}
 \usage{
-pv_score_by_user(scored_events)
+pv_score_by_user(log)
 }
 \arguments{
-\item{scored_events}{a \code{\link[=pv_score_events]{pv_score_events()}} result.}
+\item{log}{a \code{\link[=pv_pull_subprocess_log]{pv_pull_subprocess_log()}} result.}
 }
 \value{
-a \code{data.frame}, highest first: \code{user_id}, \code{total_score}, \code{n_events}.
+a \code{data.frame}, highest first: \code{user_id}, \code{total_score}, \code{n_rows}.
 }
 \description{
-Total engagement score per user
+Each \code{total_weight} value is already a recorder-computed sum for one
+\verb{(session, step)} bucket (see \code{\link[=pv_pull_subprocess_log]{pv_pull_subprocess_log()}}) -- scoring a
+user is just summing those buckets, no per-click weight lookup needed.
 }

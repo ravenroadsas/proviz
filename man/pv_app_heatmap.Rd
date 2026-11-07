@@ -2,32 +2,24 @@
 % Please edit documentation in R/pv_kpis.R
 \name{pv_app_heatmap}
 \alias{pv_app_heatmap}
-\title{User/role activity heatmap at app granularity, within a chosen set of
+\title{User activity heatmap at app granularity, within a chosen set of
 business processes}
 \usage{
-pv_app_heatmap(pv_con, registry, by = c("user", "role"), process_ids = NULL)
+pv_app_heatmap(registry, process_ids = NULL)
 }
 \arguments{
-\item{pv_con}{a \code{\link[=pv_connect_registry]{pv_connect_registry()}} result.}
-
-\item{registry}{the same \code{\link[=pv_load_registry]{pv_load_registry()}} result \code{pv_con} was built
-from.}
-
-\item{by}{\code{"user"} (default) or \code{"role"}.}
+\item{registry}{a \code{\link[=pv_load_registry]{pv_load_registry()}} result.}
 
 \item{process_ids}{character vector of \code{process_id}s to scope to, or
 \code{NULL} (default) for every monitored app across the whole portfolio.}
 }
 \value{
 a \code{data.frame}, long-form: \code{process_id}, \code{process} (label),
-\code{app}, \code{subprocess}, \code{user_id} or \code{role} (named for \code{by}), \code{n_cases}.
-Zero rows if none of the scoped apps has a \code{duckdb_path} or any
-events yet.
+\code{app}, \code{subprocess}, \code{user_id}, \code{n_cases}. Zero rows if none of the
+scoped apps has a \code{log_path} or any log data yet.
 }
 \description{
-The "break down by app" mode behind the users-and-roles heatmap --
+The "break down by app" mode behind the users heatmap --
 \code{\link[=pv_portfolio_heatmap]{pv_portfolio_heatmap()}}'s one-column-per-process view, one level
-finer: a column per monitored app instead, scoped to \code{process_ids} so
-breaking a handful of processes down into their apps doesn't also pull
-every other instrumented process's apps.
+finer: a column per monitored app instead.
 }

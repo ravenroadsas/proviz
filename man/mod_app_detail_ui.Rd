@@ -10,8 +10,6 @@ mod_app_detail_ui(id)
 \item{id}{module id.}
 }
 \description{
-The deepest of the three levels: one specific app within one step of
-one business process, mined at that app's own activity granularity
-(its own \code{ideal_process} file) -- as opposed to the business detail
-tab's step-granularity view across every app in the process.
+The deepest level: one specific app's own step diagram, mined from
+its own event log.
 }

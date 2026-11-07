@@ -4,18 +4,24 @@
 \alias{mod_app_detail_server}
 \title{Server logic for the app detail tab}
 \usage{
-mod_app_detail_server(id, pv_con, registry, selected_app)
+mod_app_detail_server(
+  id,
+  registry,
+  selected_app,
+  refresh = shiny::reactive(NULL)
+)
 }
 \arguments{
 \item{id}{module id.}
-
-\item{pv_con}{a reactive returning the current \code{\link[=pv_connect_registry]{pv_connect_registry()}} result.}
 
 \item{registry}{a reactive returning the current \code{\link[=pv_load_registry]{pv_load_registry()}} result.}
 
 \item{selected_app}{a reactive giving \code{list(process_id, subprocess)} to
 jump to (e.g. from \code{\link[=mod_business_detail_server]{mod_business_detail_server()}}'s "Open app
 detail"), or \code{NULL}.}
+
+\item{refresh}{a reactive (any value) bumped whenever logs should be
+re-read.}
 }
 \description{
 Server logic for the app detail tab

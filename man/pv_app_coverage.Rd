@@ -16,8 +16,7 @@ a list: \code{by_process} (a \code{data.frame}: \code{process_id}, \code{n_apps}
 process).
 }
 \description{
-The app-level counterpart to \code{\link[=pv_step_coverage]{pv_step_coverage()}} -- every app counts
-individually here (unlike a step, which counts as monitored as soon as
-\emph{any} one of its apps is), since "how many of the apps I've scoped are
-actually instrumented" is its own, finer-grained coverage signal.
+An app counts as monitored if it has a \code{log_path} declared (not
+necessarily reachable right now -- consistent with how \code{\link[=pv_coverage]{pv_coverage()}}
+already treats \code{status} as a declared signal, not a live-checked one).
 }

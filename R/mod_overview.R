@@ -31,10 +31,7 @@ pv_format_duration <- function(mins) {
 #' Portfolio overview tab: portfolio-wide KPIs and the business-process list
 #'
 #' The dashboard's landing tab -- a portfolio-of-processes view, not a
-#' single process's own detail (see [mod_business_detail_ui()] for that):
-#' how many business processes are registered, how much of their declared
-#' step map is actually monitored, and usage/completion totals across the
-#' whole portfolio.
+#' single process's own detail (see [mod_business_detail_ui()] for that).
 #'
 #' @param id module id.
 #' @export
@@ -45,7 +42,6 @@ mod_overview_ui <- function(id) {
       class = "pv-kpi-row",
       pv_kpi_box("Business processes", shiny::textOutput(ns("kpi_processes"), inline = TRUE), shiny::icon("sitemap")),
       pv_kpi_box("Instrumented", shiny::textOutput(ns("kpi_instrumented"), inline = TRUE), shiny::icon("plug")),
-      pv_kpi_box("Steps monitored", shiny::textOutput(ns("kpi_steps"), inline = TRUE), shiny::icon("list-check")),
       pv_kpi_box("Apps monitored", shiny::textOutput(ns("kpi_apps"), inline = TRUE), shiny::icon("plug-circle-check")),
       pv_kpi_box("Active cases", shiny::textOutput(ns("kpi_cases"), inline = TRUE), shiny::icon("diagram-project")),
       pv_kpi_box("Distinct users", shiny::textOutput(ns("kpi_users"), inline = TRUE), shiny::icon("users")),
@@ -71,30 +67,29 @@ mod_overview_ui <- function(id) {
 #' Server logic for the portfolio overview tab
 #'
 #' @param id module id.
-#' @param pv_con a reactive returning the current [pv_connect_registry()] result.
 #' @param registry a reactive returning the current [pv_load_registry()] result.
+#' @param refresh a reactive (any value) bumped whenever logs should be
+#'   re-read -- e.g. the "Refresh data" button's timestamp.
 #' @return a list: `selected_process`, a reactive giving the `process_id`
 #'   the user asked to open ("Open business process" clicked). `NULL`
 #'   until clicked.
 #' @export
-mod_overview_server <- function(id, pv_con, registry) {
+mod_overview_server <- function(id, registry, refresh = shiny::reactive(NULL)) {
   shiny::moduleServer(id, function(input, output, session) {
     kpi_grid <- shiny::reactive({
-      shiny::req(pv_con(), registry())
-      pv_registry_kpis(pv_con(), registry())
+      refresh()
+      shiny::req(registry())
+      pv_registry_kpis(registry())
     })
 
     portfolio <- shiny::reactive({
-      shiny::req(pv_con(), registry())
-      pv_portfolio_kpis(pv_con(), registry())
+      refresh()
+      shiny::req(registry())
+      pv_portfolio_kpis(registry())
     })
 
     output$kpi_processes <- shiny::renderText(as.character(portfolio()$n_processes))
     output$kpi_instrumented <- shiny::renderText(as.character(portfolio()$n_instrumented))
-    output$kpi_steps <- shiny::renderText({
-      p <- portfolio()
-      sprintf("%d / %d", p$n_steps_monitored, p$n_steps)
-    })
     output$kpi_apps <- shiny::renderText({
       p <- portfolio()
       sprintf("%d / %d", p$n_apps_monitored, p$n_apps)
@@ -132,7 +127,7 @@ mod_overview_server <- function(id, pv_con, registry) {
         Owner = grid$owner,
         Status = vapply(grid$status, pv_status_badge, character(1)),
         Loop = vapply(pv_loop_label(grid$loop_length), pv_type_badge, character(1), USE.NAMES = FALSE),
-        Steps = grid$n_steps,
+        Apps = sprintf("%s / %s", grid$n_apps_monitored, grid$n_apps),
         Runs = vapply(seq_len(nrow(grid)), function(i) pv_cell_bar(as.character(grid$n_cases[i]), runs_pct[i]), character(1)),
         `Median duration` = pv_format_duration(grid$median_duration_mins),
         Users = grid$n_users,

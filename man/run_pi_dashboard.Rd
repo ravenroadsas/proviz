@@ -21,13 +21,13 @@ without a real shared mount or real application data.}
 does not return; runs the Shiny app.
 }
 \description{
-Loads the process registry (a real one, or synthetic demo data), attaches
-every instrumented app's DuckDB store (see \code{\link[=pv_connect_registry]{pv_connect_registry()}}), and
-runs the five-tab Shiny dashboard: a portfolio overview of every
-registered business process, a business-process detail tab (its step
-flow and business-level process mining), an app detail tab (one app's
-own activity-level mining), a users/roles heatmap (plus per-user/app
-engagement-score correlations) across the whole portfolio, and an
-adoption tab (the IGA index per app, from the registry's
-\code{adoption_source} workbook -- see \code{\link[=pv_load_adoption]{pv_load_adoption()}}).
+Loads the process registry (a real one, or synthetic demo data) and
+runs the five-tab Shiny dashboard, reading each app's own event log
+straight from its \code{log_path} (see \code{\link[=pv_pull_subprocess_log]{pv_pull_subprocess_log()}}): a
+portfolio overview of every registered business process, a
+business-process detail tab (the apps that make it up, rolled up), an
+app detail tab (one app's own step-level mining), a users heatmap
+(plus per-user/app engagement-score correlations) across the whole
+portfolio, and an adoption tab (the IGA index per app, from the
+registry's \code{adoption_source} workbook -- see \code{\link[=pv_load_adoption]{pv_load_adoption()}}).
 }

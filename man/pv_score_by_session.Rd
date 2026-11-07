@@ -2,16 +2,16 @@
 % Please edit documentation in R/pv_adoption.R
 \name{pv_score_by_session}
 \alias{pv_score_by_session}
-\title{Total engagement score per logged session}
+\title{Total engagement score per session}
 \usage{
-pv_score_by_session(scored_events)
+pv_score_by_session(log)
 }
 \arguments{
-\item{scored_events}{a \code{\link[=pv_score_events]{pv_score_events()}} result.}
+\item{log}{a \code{\link[=pv_pull_subprocess_log]{pv_pull_subprocess_log()}} result.}
 }
 \value{
-a \code{data.frame}, highest first: \code{session_id}, \code{total_score}, \code{n_events}.
+a \code{data.frame}, highest first: \code{session_id}, \code{total_score}, \code{n_rows}.
 }
 \description{
-Total engagement score per logged session
+Total engagement score per session
 }

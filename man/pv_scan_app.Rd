@@ -36,7 +36,8 @@ this input is read outside any \code{observeEvent} in this file}
 string (computed at runtime) -- see Details}
 \item{suggested_debounce}{for \code{kind == "ui_widget"}: a heuristic
 guess (by widget type) at whether settling this input should be
-debounced before logging it -- see \code{protrace::pt_debounced_event()}}
+debounced before the recorder logs it (a continuous input like a
+slider firing on every drag tick vs. a discrete click)}
 \item{nearby_comment}{the comment block immediately preceding this
 line, if any -- often already states business intent}
 \item{activity_id, notes}{blank; for the human mapping step}
@@ -49,10 +50,9 @@ never wrapped in \code{observeEvent}), every UI widget declaration (with its
 label), every \code{downloadHandler}, every navigation tab title, and every
 \code{moduleServer()} boundary, across every \code{.R} file under \code{path}. It never
 decides what any of this \emph{means} for a business process -- that's the
-human mapping step (see protrace's process mining playbook, step 3).
-The output is meant to be exported (\code{write.csv()}/an xlsx writer) and
-annotated by hand, turning "read this codebase cold" into "fill in two
-blank columns."
+human mapping step (see \code{\link[=run_registry_editor]{run_registry_editor()}}'s "Scan & map steps"
+tab). The output is meant to be reviewed and annotated by hand,
+turning "read this codebase cold" into "fill in two blank columns."
 }
 \details{
 Deliberately does not try to be a complete R static analyzer. Known,

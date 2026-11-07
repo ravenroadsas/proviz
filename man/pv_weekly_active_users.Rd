@@ -4,16 +4,15 @@
 \alias{pv_weekly_active_users}
 \title{Distinct users active in the trailing week}
 \usage{
-pv_weekly_active_users(events)
+pv_weekly_active_users(log)
 }
 \arguments{
-\item{events}{a case-linked events \code{data.frame}.}
+\item{log}{a \code{\link[=pv_pull_subprocess_log]{pv_pull_subprocess_log()}} result.}
 }
 \value{
 a single integer.
 }
 \description{
-"Weekly active users" anchored to the most recent event in \code{events}
-(not \code{Sys.time()}), so this stays meaningful against historical/demo
-data too, not only a live system queried in real time.
+Anchored to the most recent session in \code{log} (not \code{Sys.time()}), so
+this stays meaningful against historical/demo data too.
 }

@@ -17,65 +17,55 @@ organization-specific registry instead.}
 a \code{pv_registry} object (a list):
 \describe{
 \item{\verb{$processes}}{one row per business process: \code{process_id},
-\code{macroprocess}, \code{process}, \code{owner}, \code{status}, \code{loop_length} --
-\code{"short"}/\code{"medium"}/\code{"long"}, how immediate the process's outcome
-and the data behind it are, e.g. daily production surveillance is
-short-loop, reserves estimation is long-loop.}
-\item{\verb{$subprocesses}}{one row per app/step a process spans:
-\code{process_id}, \code{app}, \code{subprocess}, \code{step} (a slug grouping one or
-more apps into the same ordered step), \code{step_label}, \code{step_order}
-(position of the step within the process), \code{app_order} (position
-of this app within its step), \code{duckdb_path} (\code{NA} until the app is
+\code{macroprocess}, \code{process}, \code{owner}, \code{status}, \code{loop_length}.}
+\item{\verb{$subprocesses}}{one row per app: \code{process_id}, \code{subprocess},
+\code{app}, \code{app_link} (\code{NA} if undeclared), \code{log_path} (\code{NA} until
 instrumented), \code{adoption_threshold} (\code{NA} unless declared -- the
-weekly score, in points, an identified user must average to count
-as "actively using" this app for \code{\link[=pv_app_iga]{pv_app_iga()}}'s usage
-component). Zero rows for a process with no app scoped yet.}
-\item{\verb{$steps}}{one row per distinct (process, step), derived from
-\verb{$subprocesses}: \code{process_id}, \code{step}, \code{step_label}, \code{step_order}
--- ordered within each process. A convenience view; not separately
-authored.}
-\item{\verb{$ideal}}{a named list, keyed by \code{"<process_id>::<subprocess>"}
-(one entry per app, not per business process), of
-\code{\link[=pv_load_ideal_process]{pv_load_ideal_process()}}-shaped results -- \code{NULL} for an app with
-no ideal process declared.}
-\item{\verb{$step_variants}}{a named list, keyed by \code{process_id}, of
-declared acceptable step-label sequences (each a character
-vector) -- absent (\code{NULL} via \code{[[}) for a process that didn't
-declare \code{step_variants}, or declared it as an empty list
-(\verb{step_variants: []} is treated the same as omitting the field,
-not as "zero acceptable paths" -- the latter would silently make
-conformance unscorable), in which case \code{\link[=pv_step_sequence]{pv_step_sequence()}} falls
-back to the single \code{step_order}-derived sequence.}
+weekly score, in points, an identified user must average to
+count as "actively using" this app for \code{\link[=pv_app_iga]{pv_app_iga()}}'s usage
+component).}
+\item{\verb{$process_diagrams}}{a named list, keyed by \code{process_id}:
+\verb{$edges} (a \code{data.frame}: \code{from_subprocess}, \code{to_subprocess}) and
+\verb{$outcomes} (a \code{data.frame}: \code{id}, \code{label}, \code{kind}
+(\code{"deliverable"}/\code{"decision"}), \code{subprocess} (which node
+concludes it), \code{tier}, \code{outcome_tracking_app},
+\code{outcome_tracking_join_key}). Absent (\code{NULL} via \code{[[}) for a
+process with no declared edges/outcomes yet.}
+\item{\verb{$subprocess_diagrams}}{a named list, keyed by
+\code{"<process_id>::<subprocess>"}: \verb{$steps} (a \code{data.frame}: \code{id},
+\code{label}), \verb{$edges} (\code{from_step}, \code{to_step}), \verb{$outcomes} (same
+shape as \verb{$process_diagrams}' but \code{step_id} instead of
+\code{subprocess}). Absent for a subprocess with no declared steps yet.}
+\item{\verb{$clicks}}{a named list, keyed by \code{"<process_id>::<subprocess>"},
+of \code{data.frame}s: \code{id}, \code{step_id}, \code{label}, \code{selector}, \code{kind},
+\code{feature}, \code{event}, \code{weight}. Absent for a subprocess with no
+declared clicks yet.}
 \item{\verb{$adoption_source}}{path to the yearly training/satisfaction
 Excel workbook (see \code{\link[=pv_load_adoption]{pv_load_adoption()}}) -- \code{NULL} if the
 registry's \code{settings} table has no \code{adoption_source} row.}
 }
 }
 \description{
-The registry is the source of truth for the dashboard's portfolio
-overview and its coverage KPI: one row per target business process,
-whether or not it is instrumented yet. It lives in a local DuckDB file
-(see \code{\link[=pv_registry_migrate_yaml]{pv_registry_migrate_yaml()}} for how the original hand-authored
-\code{processes.yml} is converted, and \code{data-raw/build_registry_db.R} for
-how the registry shipped with this package was produced), so a
-companion editor app can write into it a row at a time -- this
-function only reads it, read-only.
+The registry lives in a local DuckDB file (see \code{pv_registry_db_create_schema()}'s
+schema, built up via the registry editor app or \code{\link[=pv_demo_registry]{pv_demo_registry()}}'s
+seeding helpers) and models four things, read-only here:
+\enumerate{
+\item \strong{Registry} -- \verb{$processes}/\verb{$subprocesses}: the
+macroprocess/process/subprocess hierarchy. A subprocess is 1:1
+with an app, but keeps its own \code{app} name and \code{app_link} (which
+can differ from the subprocess's own id) plus \code{log_path} (where
+that app's event log lives -- see \code{\link[=pv_pull_subprocess_log]{pv_pull_subprocess_log()}}).
+\item \strong{Ideal diagrams} -- \verb{$process_diagrams}/\verb{$subprocess_diagrams}:
+a graph (nodes + directed edges, cycles allowed -- there is no
+enumerated list of "variants") plus named outcomes, at the process
+level (nodes = its subprocesses) and at the subprocess level
+(nodes = that one app's own steps).
+\item \strong{Click map} -- \verb{$clicks}: each subprocess's concrete
+click -> step bindings (selector/kind/feature/event/weight), many
+clicks to one step. Not consulted when reading a real log (see
+\code{\link[=pv_pull_subprocess_log]{pv_pull_subprocess_log()}}) -- only relevant for a future
+telemetry-config export.
 }
-\details{
-A business process is composed of one or more ordered \strong{steps}, and
-each step is carried out by one or more ordered \strong{apps} (an app's own
-internal activities/variants/outcomes -- its own ideal process -- are
-declared per app, not at the business-process level: see
-\code{\link[=pv_load_ideal_process]{pv_load_ideal_process()}}).
-
-By default the business-level "ideal flow" is just the step order
-itself, a single straight-through sequence (see \code{\link[=pv_step_sequence]{pv_step_sequence()}}).
-A process whose real flow branches or loops back to an earlier step
-can instead declare \code{step_variants}: a list of acceptable step-slug
-sequences, mirroring how an app's own ideal process declares multiple
-\code{variants} -- a branch is just two variants that share a prefix then
-diverge, and a loop is a variant that repeats a step slug. When
-present, this overrides the single \code{step_order}-derived sequence for
-conformance purposes; \code{step_order} still orders the step-flow display
-either way.
+The fourth artifact, the actual log records, is never part of the
+registry -- it's read straight from each subprocess's \code{log_path}.
 }

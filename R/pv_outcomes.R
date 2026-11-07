@@ -1,59 +1,55 @@
-#' Which named outcome(s) a case's trace reached
+#' Which named outcome(s) a trace reached
 #'
 #' A case can reach zero outcomes (nothing terminal logged yet --
-#' `"incomplete"`), exactly one, or (for an `outcome_exclusivity = "multi"`
-#' process) more than one -- e.g. a workover proposal logged alongside an
-#' escalation. Matching is by activity id present anywhere in the trace,
-#' not position, since a wrap-up step (a report signoff) can legitimately
-#' come after the decision it documents.
+#' `"incomplete"`), exactly one, or (for an `outcome_exclusivity`-free
+#' model, more than one is always allowed here) more than one. Matching
+#' is by node id present anywhere in the trace, not position, since a
+#' wrap-up step can legitimately come after the decision it documents.
 #'
-#' @param trace character vector: one case's activity ids, in the order
-#'   they occurred.
-#' @param outcomes an `outcomes` data.frame from a [pv_load_ideal_process()]
-#'   result (zero rows is fine -- every case is then `"incomplete"`).
+#' @param trace character vector: one case's node ids (steps, or
+#'   subprocesses at process level), in the order they occurred.
+#' @param outcomes an outcomes `data.frame` from a [pv_load_registry()]
+#'   diagram (`$subprocess_diagrams[[key]]$outcomes` or
+#'   `$process_diagrams[[pid]]$outcomes`) -- zero rows is fine (every
+#'   case is then `"incomplete"`).
+#' @param node_col the column in `outcomes` naming which node concludes
+#'   it -- `"step_id"` (subprocess-level outcomes, the default) or
+#'   `"subprocess"` (process-level outcomes).
 #' @return a list: `outcome_ids` (character vector, in the order they
 #'   occurred in the trace; length 0 if none fired), `status`
 #'   (`"completed"` if at least one fired, else `"incomplete"`).
 #' @export
-pv_case_outcome <- function(trace, outcomes) {
+pv_case_outcome <- function(trace, outcomes, node_col = "step_id") {
   trace <- as.character(trace)
   if (length(trace) == 0 || is.null(outcomes) || nrow(outcomes) == 0) {
     return(list(outcome_ids = character(0), status = "incomplete"))
   }
 
-  hit_activities <- intersect(outcomes$activity_id, trace)
-  if (length(hit_activities) == 0) {
+  hit_nodes <- intersect(outcomes[[node_col]], trace)
+  if (length(hit_nodes) == 0) {
     return(list(outcome_ids = character(0), status = "incomplete"))
   }
 
-  ordered_activities <- hit_activities[order(match(hit_activities, trace))]
-  outcome_ids <- outcomes$id[match(ordered_activities, outcomes$activity_id)]
+  ordered_nodes <- hit_nodes[order(match(hit_nodes, trace))]
+  outcome_ids <- outcomes$id[match(ordered_nodes, outcomes[[node_col]])]
   list(outcome_ids = outcome_ids, status = "completed")
 }
 
 #' Per-case outcome table
 #'
-#' The per-case view behind [pv_outcome_distribution()]'s aggregate, and
-#' the natural left-hand side for [pv_join_external_outcomes()] -- one row
-#' per case, ready to attach a real-world result to.
-#'
-#' @param events a case-linked events `data.frame` (`case_id`,
-#'   `activity_id`, `timestamp`).
-#' @param ideal_process a [pv_load_ideal_process()] result.
-#' @return a `data.frame`, one row per case: `case_id`, `outcome_ids`
-#'   (comma-joined; `""` if none), `status` (`"completed"`/`"incomplete"`).
+#' @param traces a named list of character vectors (e.g.
+#'   [pv_session_step_sequences()]'s result), keyed by case/session id.
+#' @param outcomes,node_col see [pv_case_outcome()].
+#' @return a `data.frame`, one row per entry in `traces`: `case_id`,
+#'   `outcome_ids` (comma-joined; `""` if none), `status`
+#'   (`"completed"`/`"incomplete"`).
 #' @export
-pv_case_outcome_table <- function(events, ideal_process) {
-  stopifnot(is.data.frame(events), all(c("case_id", "activity_id", "timestamp") %in% names(events)))
-  if (nrow(events) == 0) {
+pv_case_outcome_table <- function(traces, outcomes, node_col = "step_id") {
+  if (length(traces) == 0) {
     return(data.frame(case_id = character(0), outcome_ids = character(0), status = character(0)))
   }
-
-  ordered <- events[order(events$case_id, events$timestamp), ]
-  traces <- split(ordered$activity_id, ordered$case_id)
-
   rows <- lapply(names(traces), function(cid) {
-    res <- pv_case_outcome(traces[[cid]], ideal_process$outcomes)
+    res <- pv_case_outcome(traces[[cid]], outcomes, node_col)
     data.frame(
       case_id = cid, outcome_ids = paste(res$outcome_ids, collapse = ", "),
       status = res$status, stringsAsFactors = FALSE
@@ -64,48 +60,39 @@ pv_case_outcome_table <- function(events, ideal_process) {
   out
 }
 
-#' Outcome distribution across a process's cases
+#' Outcome distribution across a set of traces
 #'
-#' Counts how often each named outcome (see [pv_load_ideal_process()]'s
-#' `$outcomes`) was reached, plus how many cases reached none yet
-#' (`"incomplete"`). For an `outcome_exclusivity = "multi"` process a case
-#' can count toward more than one outcome, so percentages need not sum to
-#' 100 -- each is simply the share of cases that reached that outcome.
+#' Counts how often each named outcome was reached, plus how many cases
+#' reached none yet (`"incomplete"`). A case can count toward more than
+#' one outcome, so percentages need not sum to 100.
 #'
-#' This is deliberately a separate metric from conformance: which decision
-#' a case landed on is a business result, not a measure of whether the
-#' right steps were followed to get there (see [pv_case_conformance()]).
+#' This is deliberately a separate metric from conformance (see
+#' [pv_graph_conformance()]): which outcome a case landed on is a
+#' business result, not a measure of whether the right steps were
+#' followed to get there.
 #'
-#' @param events a case-linked events `data.frame`.
-#' @param ideal_process a [pv_load_ideal_process()] result.
+#' @param traces a named list of character vectors, keyed by case id.
+#' @param outcomes,node_col see [pv_case_outcome()].
 #' @return a `data.frame`, most common first: `outcome_id`, `label`,
 #'   `kind`, `tier`, `n_cases`, `pct`. Includes an `"incomplete"` row
 #'   (`kind`/`tier` `NA`) whenever any case reached no outcome.
 #' @export
-pv_outcome_distribution <- function(events, ideal_process) {
-  outcomes <- ideal_process$outcomes
+pv_outcome_distribution <- function(traces, outcomes, node_col = "step_id") {
   empty <- data.frame(
     outcome_id = character(0), label = character(0), kind = character(0),
     tier = character(0), n_cases = integer(0), pct = numeric(0)
   )
-  if (nrow(events) == 0) {
+  if (length(traces) == 0 || is.null(outcomes) || nrow(outcomes) == 0) {
     return(empty)
   }
 
-  ordered <- events[order(events$case_id, events$timestamp), ]
-  traces <- split(ordered$activity_id, ordered$case_id)
   n_total <- length(traces)
-
-  results <- lapply(traces, pv_case_outcome, outcomes = outcomes)
+  results <- lapply(traces, pv_case_outcome, outcomes = outcomes, node_col = node_col)
   fired <- unlist(lapply(results, `[[`, "outcome_ids"))
   n_incomplete <- sum(vapply(results, function(r) r$status == "incomplete", logical(1)))
 
-  if (nrow(outcomes) == 0) {
-    counts <- data.frame(outcome_id = character(0), n_cases = integer(0))
-  } else {
-    tab <- table(factor(fired, levels = outcomes$id))
-    counts <- data.frame(outcome_id = names(tab), n_cases = as.integer(tab), stringsAsFactors = FALSE)
-  }
+  tab <- table(factor(fired, levels = outcomes$id))
+  counts <- data.frame(outcome_id = names(tab), n_cases = as.integer(tab), stringsAsFactors = FALSE)
 
   out <- merge(
     data.frame(
@@ -133,85 +120,128 @@ pv_outcome_distribution <- function(events, ideal_process) {
   out
 }
 
-#' Business-level outcome distribution for one process
-#'
-#' A business process's overall outcome is the one reached by whichever
-#' app(s) sit in its *final* step (by `step_order`, see
-#' [pv_final_step_apps()]) -- the step order already encodes "last app to
-#' touch the case before it's done", so there's no separate business-level
-#' outcome vocabulary to author: this just pulls that step's app(s)' own
-#' declared outcomes (from each app's own [pv_load_ideal_process()]
-#' `ideal_process` file) and reuses [pv_outcome_distribution()] unchanged,
-#' fed only that final step's events. A step with more than one app pools
-#' all of their events and outcome tables first (two apps can log the same
-#' case under different activity ids without colliding, since outcome ids
-#' are the model's selector, not activity ids directly).
-#'
-#' @param pv_con a [pv_connect_registry()] result.
+#' This subprocess's own outcome distribution
 #' @param registry a [pv_load_registry()] result.
-#' @param process_id a `process_id` from `registry$processes`.
-#' @param events the final step's own events, already pulled -- pass this
-#'   to reuse a filtered slice (e.g. from [mod_business_detail_server()]'s
-#'   date/role/user filters) instead of an unfiltered re-pull. Defaults to
-#'   pulling every attached final-step app's events fresh.
-#' @return a `data.frame`, same shape as [pv_outcome_distribution()]'s.
-#'   Zero rows if the process has no steps, its final step has no
-#'   attached apps, none of those apps declare an `ideal_process`, or
-#'   `events` is empty.
+#' @param process_id,subprocess identify the app.
+#' @param log optionally, an already-pulled/filtered log to reuse (see
+#'   [pv_filter_log()]) instead of pulling fresh.
+#' @return a `data.frame`, [pv_outcome_distribution()]'s shape.
 #' @export
-pv_business_outcome_distribution <- function(pv_con, registry, process_id, events = NULL) {
+pv_subprocess_outcome_distribution <- function(registry, process_id, subprocess, log = NULL) {
   empty <- data.frame(
     outcome_id = character(0), label = character(0), kind = character(0),
     tier = character(0), n_cases = integer(0), pct = numeric(0)
   )
+  diagram <- registry$subprocess_diagrams[[paste(process_id, subprocess, sep = "::")]]
+  if (is.null(diagram)) {
+    return(empty)
+  }
+  if (is.null(log)) log <- pv_pull_subprocess_log(registry, process_id, subprocess)
+  traces <- pv_session_step_sequences(log)
+  pv_outcome_distribution(traces, diagram$outcomes, "step_id")
+}
 
-  final_apps <- pv_final_step_apps(registry, process_id)
-  if (nrow(final_apps) == 0) {
+#' Which of a process's subprocesses conclude it
+#'
+#' Prefers the process's own declared `$process_diagrams[[pid]]$outcomes`
+#' (each names the one subprocess that concludes it directly -- ground
+#' truth, and the only option that works when the diagram has a cycle,
+#' where a pure graph-theoretic "sink" -- no outgoing edge -- may not
+#' exist at all: a rework loop back to an earlier subprocess means every
+#' node has an outgoing edge). Falls back to sinks in the process-level
+#' diagram (a subprocess with no outgoing edge) only when no outcomes are
+#' declared yet; with no edges declared either, every subprocess counts
+#' (there's no declared flow to say otherwise).
+#'
+#' @param registry a [pv_load_registry()] result.
+#' @param process_id a `process_id` from `registry$processes`.
+#' @return a `subprocesses`-shaped `data.frame`, filtered to the final
+#'   node(s). Zero rows if the process has no subprocesses.
+#' @export
+pv_final_subprocesses <- function(registry, process_id) {
+  subs <- registry$subprocesses[registry$subprocesses$process_id == process_id, ]
+  if (nrow(subs) == 0) {
+    return(subs)
+  }
+  diagram <- registry$process_diagrams[[process_id]]
+  if (!is.null(diagram) && nrow(diagram$outcomes) > 0) {
+    return(subs[subs$subprocess %in% unique(diagram$outcomes$subprocess), ])
+  }
+  if (is.null(diagram) || nrow(diagram$edges) == 0) {
+    return(subs)
+  }
+  sources <- unique(diagram$edges$from_subprocess)
+  subs[!subs$subprocess %in% sources, ]
+}
+
+#' Business-level outcome distribution for one process
+#'
+#' A business process's overall outcome is the one reached by whichever
+#' subprocess(es) sit at the end of its declared flow (see
+#' [pv_final_subprocesses()]) -- pools each final subprocess's own
+#' sessions (tagged by subprocess so same-named session ids from
+#' different apps can't collide) and their own declared outcomes, then
+#' reuses [pv_outcome_distribution()] unchanged.
+#'
+#' There is deliberately no attempt here to link a case across more than
+#' one subprocess/app into a single cross-app case: this log shape
+#' carries only a per-app `session_id`, no shared entity/case key, so
+#' each final app's own sessions are counted as independent cases. If a
+#' real cross-app case identity becomes available, this is the function
+#' to extend.
+#'
+#' @param registry a [pv_load_registry()] result.
+#' @param process_id a `process_id` from `registry$processes`.
+#' @return a `data.frame`, same shape as [pv_outcome_distribution()]'s.
+#'   Zero rows if the process has no final subprocess with both a log and
+#'   a declared outcome.
+#' @export
+pv_process_outcome_distribution <- function(registry, process_id) {
+  empty <- data.frame(
+    outcome_id = character(0), label = character(0), kind = character(0),
+    tier = character(0), n_cases = integer(0), pct = numeric(0)
+  )
+  finals <- pv_final_subprocesses(registry, process_id)
+  if (nrow(finals) == 0) {
     return(empty)
   }
 
-  if (is.null(events)) {
-    events <- do.call(rbind, c(
-      lapply(seq_len(nrow(final_apps)), function(i) {
-        pv_pull_app_events(pv_con, registry, process_id, final_apps$subprocess[i])
-      }),
-      list(pv_empty_events())
-    ))
-  }
-  if (nrow(events) == 0) {
-    return(empty)
-  }
-
-  outcomes <- do.call(rbind, c(
-    lapply(seq_len(nrow(final_apps)), function(i) {
-      ideal <- registry$ideal[[paste(process_id, final_apps$subprocess[i], sep = "::")]]
-      if (is.null(ideal)) NULL else ideal$outcomes
-    }),
-    list(NULL)
-  ))
-  if (is.null(outcomes) || nrow(outcomes) == 0) {
-    return(empty)
+  all_traces <- list()
+  all_outcomes <- list()
+  for (i in seq_len(nrow(finals))) {
+    key <- paste(process_id, finals$subprocess[i], sep = "::")
+    diagram <- registry$subprocess_diagrams[[key]]
+    if (is.null(diagram) || nrow(diagram$outcomes) == 0) next
+    log <- pv_pull_subprocess_log(registry, process_id, finals$subprocess[i])
+    seqs <- pv_session_step_sequences(log)
+    if (length(seqs) == 0) next
+    names(seqs) <- paste(finals$subprocess[i], names(seqs), sep = "::")
+    all_traces <- c(all_traces, seqs)
+    all_outcomes[[length(all_outcomes) + 1]] <- diagram$outcomes
   }
 
-  pv_outcome_distribution(events, structure(list(outcomes = outcomes), class = "pv_ideal_process"))
+  outcomes <- do.call(rbind, c(all_outcomes, list(NULL)))
+  if (is.null(outcomes) || nrow(outcomes) == 0 || length(all_traces) == 0) {
+    return(empty)
+  }
+  pv_outcome_distribution(all_traces, outcomes, "step_id")
 }
 
 #' Business process completion rate
 #'
-#' A thin reshaping of [pv_business_outcome_distribution()] into the
+#' A thin reshaping of [pv_process_outcome_distribution()] into the
 #' single number the portfolio overview wants: what share of this
-#' process's cases (as seen at its final step) have reached *any* named
-#' outcome yet, regardless of which one.
+#' process's cases (as seen at its final subprocess(es)) have reached
+#' *any* named outcome yet, regardless of which one.
 #'
-#' @param pv_con a [pv_connect_registry()] result.
 #' @param registry a [pv_load_registry()] result.
 #' @param process_id a `process_id` from `registry$processes`.
-#' @return a list: `n_cases` (total distinct cases seen at the final
-#'   step), `n_completed` (reached at least one outcome), `pct` (`NA` if
-#'   `n_cases` is 0).
+#' @return a list: `n_cases` (total distinct sessions seen at the final
+#'   subprocess(es)), `n_completed` (reached at least one outcome), `pct`
+#'   (`NA` if `n_cases` is 0).
 #' @export
-pv_process_completion_rate <- function(pv_con, registry, process_id) {
-  dist <- pv_business_outcome_distribution(pv_con, registry, process_id)
+pv_process_completion_rate <- function(registry, process_id) {
+  dist <- pv_process_outcome_distribution(registry, process_id)
   if (nrow(dist) == 0) {
     return(list(n_cases = 0L, n_completed = 0L, pct = NA_real_))
   }
@@ -231,14 +261,13 @@ pv_process_completion_rate <- function(pv_con, registry, process_id) {
 #' averaging per-process percentages, so a process with many cases isn't
 #' drowned out by one with few.
 #'
-#' @param pv_con a [pv_connect_registry()] result.
 #' @param registry a [pv_load_registry()] result.
 #' @return a list: `n_cases`, `n_completed`, `pct` (`NA` if no
 #'   instrumented process has any cases yet).
 #' @export
-pv_portfolio_completion <- function(pv_con, registry) {
+pv_portfolio_completion <- function(registry) {
   instrumented_ids <- registry$processes$process_id[registry$processes$status == "instrumented"]
-  rates <- lapply(instrumented_ids, pv_process_completion_rate, pv_con = pv_con, registry = registry)
+  rates <- lapply(instrumented_ids, pv_process_completion_rate, registry = registry)
 
   n_cases <- sum(vapply(rates, `[[`, numeric(1), "n_cases"))
   n_completed <- sum(vapply(rates, `[[`, numeric(1), "n_completed"))
@@ -251,23 +280,17 @@ pv_portfolio_completion <- function(pv_con, registry) {
 #' Join externally-tracked real-world results onto mined per-case outcomes
 #'
 #' proviz doesn't own or connect to whatever system tracks a decision's
-#' eventual real-world result (did the workover help, did the well come in
-#' on target) -- each outcome's `outcome_tracking` pointer in the ideal
-#' process definition just documents where that lives. This is the join
-#' point: export a plain table from that system, keyed the same way, and
-#' get back the mined case data with those results attached -- ready for a
-#' by-variant or by-resource comparison (e.g. "cases handled by engineer X,
-#' via a different path than most, show a better linked result").
+#' eventual real-world result -- each outcome's `outcome_tracking`
+#' pointer in the registry just documents where that lives. This is the
+#' join point: export a plain table from that system, keyed the same
+#' way, and get back the mined case data with those results attached.
 #'
 #' @param case_outcomes a `data.frame` with a join column (default
-#'   `"case_id"`) -- e.g. [pv_case_outcome_table()]'s result, optionally
-#'   merged with resource/variant info first.
+#'   `"case_id"`) -- e.g. [pv_case_outcome_table()]'s result.
 #' @param external_results a `data.frame` from whatever system tracks the
 #'   real-world result, with a matching join column plus at least one
 #'   metric column.
-#' @param by join column name, present in both data frames. Defaults to
-#'   `"case_id"` -- pass e.g. `"entity_id"` if that's what the external
-#'   system's export is keyed on instead.
+#' @param by join column name, present in both data frames.
 #' @return `case_outcomes` left-joined with `external_results` on `by`.
 #' @export
 pv_join_external_outcomes <- function(case_outcomes, external_results, by = "case_id") {

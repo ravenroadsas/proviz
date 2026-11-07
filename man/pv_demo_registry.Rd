@@ -7,22 +7,22 @@
 pv_demo_registry(dir = tempfile("proviz_demo_"), seed = 42)
 }
 \arguments{
-\item{dir}{directory to write the synthetic DuckDB files into. Defaults
-to a fresh temp directory.}
+\item{dir}{directory to write the registry and synthetic log/workbook
+files into. Defaults to a fresh temp directory.}
 
 \item{seed}{RNG seed, for reproducible demo data.}
 }
 \value{
-a \code{pv_registry} object, structurally identical to
-\code{\link[=pv_load_registry]{pv_load_registry()}}'s.
+a \code{pv_registry} object, from \code{\link[=pv_load_registry]{pv_load_registry()}} on the
+freshly-built database.
 }
 \description{
-Writes real DuckDB event stores -- via \code{protrace::pt_connect()}/
-\code{pt_log_event()}, the exact API a real instrumented app uses, not a
-shortcut -- seeded with synthetic cases for two business processes: a
-\strong{two-app} business process (type curve construction: a drafting app
-and a separate review/publish app, cross-app case-linked, illustrating
-the step/app registry model end to end) and a single-app one (daily
+Builds a fresh registry DuckDB file (see \code{pv_registry_db_create_schema()})
+and writes synthetic event-log CSVs in the exact shape a real recorder
+produces (see \code{\link[=pv_pull_subprocess_log]{pv_pull_subprocess_log()}}) for two business processes: a
+\strong{two-app} process (type curve construction: a drafting app and a
+separate review/publish app, with a declared process-level rework
+loop back to drafting on rejection) and a single-app one (daily
 production surveillance), plus two placeholder registry rows in other
 statuses. Also writes a synthetic yearly training/satisfaction
 adoption workbook (see \code{\link[=pv_load_adoption]{pv_load_adoption()}}) covering all three real

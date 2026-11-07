@@ -2,22 +2,22 @@
 % Please edit documentation in R/pv_kpis.R
 \name{pv_variant_table}
 \alias{pv_variant_table}
-\title{Variant (trace) frequency table, with conformance per variant}
+\title{Variant (step-sequence) frequency table, with conformance per variant}
 \usage{
-pv_variant_table(events, ideal_process)
+pv_variant_table(log, diagram)
 }
 \arguments{
-\item{events}{a case-linked events \code{data.frame}.}
+\item{log}{a \code{\link[=pv_pull_subprocess_log]{pv_pull_subprocess_log()}} result.}
 
-\item{ideal_process}{a \code{\link[=pv_load_ideal_process]{pv_load_ideal_process()}} result.}
+\item{diagram}{a \verb{$subprocess_diagrams[[key]]} entry.}
 }
 \value{
-a \code{data.frame}, most frequent first: \code{trace} (activity ids
-joined by \code{" -> "}), \code{n_cases}, \code{pct}, \code{mean_conformance}.
+a \code{data.frame}, most frequent first: \code{trace} (step ids joined
+by \code{" -> "}), \code{n_cases}, \code{pct}, \code{mean_conformance}.
 }
 \description{
-Groups cases by their exact activity sequence (a "variant"/trace) and
-reports how common each is and how well it conforms to the ideal
-process -- the view that shows \emph{which} deviations are common enough to
-matter, complementing the single conformance-score summary.
+Groups sessions by their exact step sequence and reports how common
+each is and how well it conforms to the declared diagram -- the view
+that shows \emph{which} deviations are common enough to matter,
+complementing the single conformance-score summary.
 }

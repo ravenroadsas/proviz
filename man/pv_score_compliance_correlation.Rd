@@ -2,27 +2,18 @@
 % Please edit documentation in R/pv_correlations.R
 \name{pv_score_compliance_correlation}
 \alias{pv_score_compliance_correlation}
-\title{Correlation between a case's engagement score and its conformance,
+\title{Correlation between a session's engagement score and its conformance,
 per user or app-wide}
 \usage{
-pv_score_compliance_correlation(
-  events,
-  scored_events,
-  ideal_process,
-  by = c("user", "app")
-)
+pv_score_compliance_correlation(log, diagram, by = c("user", "app"))
 }
 \arguments{
-\item{events}{a case-linked events \code{data.frame} (e.g.
-\code{\link[=pv_pull_process_events]{pv_pull_process_events()}}/\code{\link[=pv_pull_app_events]{pv_pull_app_events()}}'s result).}
+\item{log}{a \code{\link[=pv_pull_subprocess_log]{pv_pull_subprocess_log()}} result.}
 
-\item{scored_events}{the same events, scored (see \code{\link[=pv_score_events]{pv_score_events()}}).}
-
-\item{ideal_process}{a \code{\link[=pv_load_ideal_process]{pv_load_ideal_process()}} result (or
-\code{\link[=pv_step_sequence]{pv_step_sequence()}}'s, for a business-level correlation).}
+\item{diagram}{a \verb{$subprocess_diagrams[[key]]} entry.}
 
 \item{by}{\code{"user"} (default, one row per user) or \code{"app"} (a single
-pooled value across every case).}
+pooled value across every session).}
 }
 \value{
 for \code{by = "user"}: a \code{data.frame}, most-cases first: \code{user_id},
@@ -30,8 +21,8 @@ for \code{by = "user"}: a \code{data.frame}, most-cases first: \code{user_id},
 \code{by = "app"}: a list \code{list(r, n_cases)}.
 }
 \description{
-Whether more-engaged (higher-scoring) cases also tend to follow the
-ideal process more closely -- a business question distinct from
-either metric alone: a user can click a lot without doing the right
-things, or conform perfectly with minimal engagement.
+Whether more-engaged (higher-scoring) sessions also tend to follow the
+declared step diagram more closely -- a business question distinct
+from either metric alone: a user can click a lot without doing the
+right things, or conform perfectly with minimal engagement.
 }

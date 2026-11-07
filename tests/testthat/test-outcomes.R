@@ -3,7 +3,7 @@ demo_outcomes <- function() {
     id = c("no_action", "change_esp_frequency", "propose_workover", "escalate_to_engineering"),
     label = c("No action", "Change ESP frequency", "Propose workover", "Escalate"),
     kind = c("decision", "decision", "decision", "decision"),
-    activity_id = c("Decide_No_Action", "Decide_Change_ESP_Frequency", "Decide_Propose_Workover", "Issue_Escalation"),
+    step_id = c("Decide_No_Action", "Decide_Change_ESP_Frequency", "Decide_Propose_Workover", "Issue_Escalation"),
     tier = c("operational", "operational", "tactical", "tactical"),
     outcome_tracking_app = NA_character_, outcome_tracking_join_key = NA_character_,
     stringsAsFactors = FALSE
@@ -24,7 +24,7 @@ test_that("pv_case_outcome finds multiple fired outcomes in trace order", {
   expect_equal(res$status, "completed")
 })
 
-test_that("pv_case_outcome reports incomplete when no outcome activity is present", {
+test_that("pv_case_outcome reports incomplete when no outcome node is present", {
   trace <- c("Data_Ingestion", "Data_Quality_Check")
   res <- pv_case_outcome(trace, demo_outcomes())
   expect_equal(res$outcome_ids, character(0))
@@ -37,14 +37,12 @@ test_that("pv_case_outcome handles empty trace and zero-row outcomes", {
 })
 
 test_that("pv_case_outcome_table returns one row per case with comma-joined outcomes", {
-  events <- data.frame(
-    case_id = c("1", "1", "2", "2", "3"),
-    activity_id = c("Decide_No_Action", "Report_Signoff", "Decide_Propose_Workover", "Issue_Escalation", "Data_Ingestion"),
-    timestamp = as.POSIXct(c("2026-01-01 09:00", "2026-01-01 09:05", "2026-01-01 09:00", "2026-01-01 09:10", "2026-01-01 09:00")),
-    stringsAsFactors = FALSE
+  traces <- list(
+    "1" = c("Decide_No_Action", "Report_Signoff"),
+    "2" = c("Decide_Propose_Workover", "Issue_Escalation"),
+    "3" = c("Data_Ingestion")
   )
-  ideal <- structure(list(outcomes = demo_outcomes()), class = "pv_ideal_process")
-  tab <- pv_case_outcome_table(events, ideal)
+  tab <- pv_case_outcome_table(traces, demo_outcomes())
   tab <- tab[order(tab$case_id), ]
 
   expect_equal(tab$status, c("completed", "completed", "incomplete"))
@@ -53,14 +51,8 @@ test_that("pv_case_outcome_table returns one row per case with comma-joined outc
 })
 
 test_that("pv_outcome_distribution counts each outcome's share and an incomplete bucket", {
-  events <- data.frame(
-    case_id = c("1", "2", "3", "4"),
-    activity_id = c("Decide_No_Action", "Decide_No_Action", "Decide_Propose_Workover", "Data_Ingestion"),
-    timestamp = as.POSIXct(rep("2026-01-01 09:00", 4)),
-    stringsAsFactors = FALSE
-  )
-  ideal <- structure(list(outcomes = demo_outcomes()), class = "pv_ideal_process")
-  dist <- pv_outcome_distribution(events, ideal)
+  traces <- list("1" = "Decide_No_Action", "2" = "Decide_No_Action", "3" = "Decide_Propose_Workover", "4" = "Data_Ingestion")
+  dist <- pv_outcome_distribution(traces, demo_outcomes())
 
   expect_equal(dist$n_cases[dist$outcome_id == "no_action"], 2)
   expect_equal(dist$pct[dist$outcome_id == "no_action"], 50)
@@ -69,20 +61,13 @@ test_that("pv_outcome_distribution counts each outcome's share and an incomplete
 })
 
 test_that("pv_outcome_distribution lets percentages exceed 100 in total for a multi-outcome process", {
-  events <- data.frame(
-    case_id = c("1", "1"),
-    activity_id = c("Decide_Propose_Workover", "Issue_Escalation"),
-    timestamp = as.POSIXct(c("2026-01-01 09:00", "2026-01-01 09:05")),
-    stringsAsFactors = FALSE
-  )
-  ideal <- structure(list(outcomes = demo_outcomes()), class = "pv_ideal_process")
-  dist <- pv_outcome_distribution(events, ideal)
+  traces <- list("1" = c("Decide_Propose_Workover", "Issue_Escalation"))
+  dist <- pv_outcome_distribution(traces, demo_outcomes())
   expect_equal(sum(dist$pct), 200) # one case, two outcomes, 100% each
 })
 
-test_that("pv_outcome_distribution returns the empty schema for zero events", {
-  ideal <- structure(list(outcomes = demo_outcomes()), class = "pv_ideal_process")
-  dist <- pv_outcome_distribution(data.frame(case_id = character(0), activity_id = character(0), timestamp = as.POSIXct(character(0))), ideal)
+test_that("pv_outcome_distribution returns the empty schema for zero traces", {
+  dist <- pv_outcome_distribution(list(), demo_outcomes())
   expect_equal(nrow(dist), 0)
 })
 

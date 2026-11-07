@@ -4,25 +4,16 @@
 \alias{pv_portfolio_kpis}
 \title{Portfolio-wide KPIs, across every instrumented business process}
 \usage{
-pv_portfolio_kpis(pv_con, registry)
+pv_portfolio_kpis(registry)
 }
 \arguments{
-\item{pv_con}{a \code{\link[=pv_connect_registry]{pv_connect_registry()}} result.}
-
-\item{registry}{the same \code{\link[=pv_load_registry]{pv_load_registry()}} result \code{pv_con} was built
-from.}
+\item{registry}{a \code{\link[=pv_load_registry]{pv_load_registry()}} result.}
 }
 \value{
-a list: \code{n_processes}, \code{n_instrumented}, \code{n_steps},
-\code{n_steps_monitored}, \code{steps_pct}, \code{n_apps}, \code{n_apps_monitored},
-\code{apps_pct}, \code{n_cases}, \code{n_users}, \code{n_weekly_users}, \code{completion_pct}
-(see \code{\link[=pv_portfolio_completion]{pv_portfolio_completion()}}).
+a list: \code{n_processes}, \code{n_instrumented}, \code{n_apps},
+\code{n_apps_monitored}, \code{apps_pct}, \code{n_cases}, \code{n_users},
+\code{n_weekly_users}, \code{completion_pct} (see \code{\link[=pv_portfolio_completion]{pv_portfolio_completion()}}).
 }
 \description{
-The headline numbers for the portfolio overview tab: how many processes
-are registered/instrumented, how much of their declared step map is
-actually monitored, and usage/completion totals computed over the
-\emph{union} of every instrumented process's events -- not a sum of each
-process's own per-process counts, which would double-count a user or
-case touching more than one process.
+Portfolio-wide KPIs, across every instrumented business process
 }

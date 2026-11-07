@@ -2,14 +2,14 @@
 % Please edit documentation in R/pv_outcomes.R
 \name{pv_outcome_distribution}
 \alias{pv_outcome_distribution}
-\title{Outcome distribution across a process's cases}
+\title{Outcome distribution across a set of traces}
 \usage{
-pv_outcome_distribution(events, ideal_process)
+pv_outcome_distribution(traces, outcomes, node_col = "step_id")
 }
 \arguments{
-\item{events}{a case-linked events \code{data.frame}.}
+\item{traces}{a named list of character vectors, keyed by case id.}
 
-\item{ideal_process}{a \code{\link[=pv_load_ideal_process]{pv_load_ideal_process()}} result.}
+\item{outcomes, node_col}{see \code{\link[=pv_case_outcome]{pv_case_outcome()}}.}
 }
 \value{
 a \code{data.frame}, most common first: \code{outcome_id}, \code{label},
@@ -17,14 +17,13 @@ a \code{data.frame}, most common first: \code{outcome_id}, \code{label},
 (\code{kind}/\code{tier} \code{NA}) whenever any case reached no outcome.
 }
 \description{
-Counts how often each named outcome (see \code{\link[=pv_load_ideal_process]{pv_load_ideal_process()}}'s
-\verb{$outcomes}) was reached, plus how many cases reached none yet
-(\code{"incomplete"}). For an \code{outcome_exclusivity = "multi"} process a case
-can count toward more than one outcome, so percentages need not sum to
-100 -- each is simply the share of cases that reached that outcome.
+Counts how often each named outcome was reached, plus how many cases
+reached none yet (\code{"incomplete"}). A case can count toward more than
+one outcome, so percentages need not sum to 100.
 }
 \details{
-This is deliberately a separate metric from conformance: which decision
-a case landed on is a business result, not a measure of whether the
-right steps were followed to get there (see \code{\link[=pv_case_conformance]{pv_case_conformance()}}).
+This is deliberately a separate metric from conformance (see
+\code{\link[=pv_graph_conformance]{pv_graph_conformance()}}): which outcome a case landed on is a
+business result, not a measure of whether the right steps were
+followed to get there.
 }

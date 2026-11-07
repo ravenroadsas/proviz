@@ -4,17 +4,23 @@
 \alias{mod_business_detail_server}
 \title{Server logic for the business process detail tab}
 \usage{
-mod_business_detail_server(id, pv_con, registry, selected_process)
+mod_business_detail_server(
+  id,
+  registry,
+  selected_process,
+  refresh = shiny::reactive(NULL)
+)
 }
 \arguments{
 \item{id}{module id.}
-
-\item{pv_con}{a reactive returning the current \code{\link[=pv_connect_registry]{pv_connect_registry()}} result.}
 
 \item{registry}{a reactive returning the current \code{\link[=pv_load_registry]{pv_load_registry()}} result.}
 
 \item{selected_process}{a reactive giving a \code{process_id} to jump to (e.g.
 from \code{\link[=mod_overview_server]{mod_overview_server()}}'s "Open business process"), or \code{NULL}.}
+
+\item{refresh}{a reactive (any value) bumped whenever logs should be
+re-read.}
 }
 \value{
 a list: \code{selected_app}, a reactive giving \code{list(process_id, subprocess)}

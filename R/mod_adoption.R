@@ -69,20 +69,22 @@ mod_adoption_ui <- function(id) {
 #' Server logic for the adoption tab
 #'
 #' @param id module id.
-#' @param pv_con a reactive returning the current [pv_connect_registry()] result.
 #' @param registry a reactive returning the current [pv_load_registry()] result.
 #' @param adoption a reactive returning the current [pv_load_adoption()] result,
 #'   or `NULL` if no `adoption_source` is configured or it failed to load.
+#' @param refresh a reactive (any value) bumped whenever logs should be
+#'   re-read.
 #' @export
-mod_adoption_server <- function(id, pv_con, registry, adoption) {
+mod_adoption_server <- function(id, registry, adoption, refresh = shiny::reactive(NULL)) {
   shiny::moduleServer(id, function(input, output, session) {
     iga_tab <- shiny::reactive({
-      shiny::req(pv_con(), registry())
+      refresh()
+      shiny::req(registry())
       ad <- adoption()
       if (is.null(ad) || length(ad) == 0) {
-        return(pv_portfolio_iga(pv_con(), registry(), list()))
+        return(pv_portfolio_iga(registry(), list()))
       }
-      pv_portfolio_iga(pv_con(), registry(), ad)
+      pv_portfolio_iga(registry(), ad)
     })
 
     output$no_data_note <- shiny::renderUI({
@@ -113,9 +115,10 @@ mod_adoption_server <- function(id, pv_con, registry, adoption) {
     output$kpi_users <- shiny::renderText(as.character(sum(iga_tab()$n_users)))
 
     output$trend_plot <- plotly::renderPlotly({
-      shiny::req(pv_con(), registry())
+      refresh()
+      shiny::req(registry())
       ad <- adoption() %||% list()
-      trend <- pv_portfolio_active_rate_trend(pv_con(), registry(), ad)
+      trend <- pv_portfolio_active_rate_trend(registry(), ad)
       shiny::validate(shiny::need(nrow(trend) > 0, "No usage-threshold data yet (declare 'adoption_threshold' per app and load an adoption workbook)."))
       plotly::plot_ly(trend,
         x = ~week, y = ~pct_active, type = "scatter", mode = "lines+markers",
@@ -135,8 +138,9 @@ mod_adoption_server <- function(id, pv_con, registry, adoption) {
     })
 
     iga_conformance <- shiny::reactive({
-      shiny::req(pv_con(), registry())
-      pv_iga_compliance_correlation(pv_con(), registry(), adoption() %||% list())
+      refresh()
+      shiny::req(registry())
+      pv_iga_compliance_correlation(registry(), adoption() %||% list())
     })
 
     output$iga_conformance_r <- shiny::renderText({

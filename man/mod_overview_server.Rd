@@ -4,14 +4,15 @@
 \alias{mod_overview_server}
 \title{Server logic for the portfolio overview tab}
 \usage{
-mod_overview_server(id, pv_con, registry)
+mod_overview_server(id, registry, refresh = shiny::reactive(NULL))
 }
 \arguments{
 \item{id}{module id.}
 
-\item{pv_con}{a reactive returning the current \code{\link[=pv_connect_registry]{pv_connect_registry()}} result.}
-
 \item{registry}{a reactive returning the current \code{\link[=pv_load_registry]{pv_load_registry()}} result.}
+
+\item{refresh}{a reactive (any value) bumped whenever logs should be
+re-read -- e.g. the "Refresh data" button's timestamp.}
 }
 \value{
 a list: \code{selected_process}, a reactive giving the \code{process_id}

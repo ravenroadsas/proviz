@@ -18,30 +18,29 @@ does not return; runs the Shiny app.
 A separate, write-capable companion to the (strictly read-only)
 process intelligence dashboard (\code{\link[=run_pi_dashboard]{run_pi_dashboard()}}) -- the
 read/write boundary is why this is its own Shiny app rather than a
-dashboard tab. Drives the registry's "scan + human curation" workflow:
-run \code{\link[=pv_scan_app]{pv_scan_app()}} against a target app's source, review the
-candidate hook inventory it finds, map each hook a human wants to
-track onto a business activity (an id, label, role, and the
-selector/kind/feature/event/weight a future telemetry export will
-need), and declare that app's acceptable activity sequences
-(variants) and named outcomes -- all written directly into the
-registry DuckDB file \code{\link[=pv_load_registry]{pv_load_registry()}} reads.
+dashboard tab. Drives the registry's "scan + human curation"
+workflow end to end, against the four-artifact model (registry,
+ideal diagrams, click map, event log -- see \code{\link[=pv_load_registry]{pv_load_registry()}}'s
+docs):
+\itemize{
+\item \strong{Processes & apps}: add a business process, add an app
+(a \code{subprocess}, 1:1 with it) to an existing process.
+\item \strong{Process flow}: declare allowed transitions between a
+process's own apps (cycles allowed -- a rework loop is just a
+back-edge), and named process-level outcomes.
+\item \strong{Scan & map steps}: run \code{\link[=pv_scan_app]{pv_scan_app()}} against a target
+app's source, review the candidate hook inventory, map each hook
+a human wants to track onto a step (creating it if new) with its
+concrete click binding (selector/kind/feature/event/weight) --
+many clicks can map to one step.
+\item \strong{Steps & outcomes}: declare an app's allowed step
+transitions (its own diagram) and named outcomes.
+}
 }
 \details{
-v1 scope is deliberately append-only: add a process, add an app to an
-existing process, add/update activities (including by curating a
-fresh scan), add a variant, add an outcome, add a business-level step
-variant. There is no delete or rename here yet -- editing a mistake
-means fixing it with a direct \code{DBI}/DuckDB statement against the file,
-same as any other data-entry error would need until a later version
-adds it.
-
-Every write opens its own short-lived connection and closes it before
-the next reactive tick (see the \verb{pv_registry_db_*} write helpers) --
-it never holds the registry file open, so \code{\link[=run_pi_dashboard]{run_pi_dashboard()}} (or
-another editor session) can read or write it between edits. Running
-this and the dashboard against the very same file at the exact same
-instant can still collide (DuckDB allows one writer at a time); this
-is meant for the occasional, human-paced editing session, not
-concurrent multi-user use.
+v1 is deliberately append-only (no delete/rename yet). Every write
+goes through a small set of plain, unit-tested \verb{pv_registry_db_*}
+helpers that open a connection, write, and close before the next
+reactive tick, so the editor never holds the registry file open
+against the dashboard or another edit.
 }

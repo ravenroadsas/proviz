@@ -2,17 +2,18 @@
 % Please edit documentation in R/mod_heatmap.R
 \name{mod_heatmap_server}
 \alias{mod_heatmap_server}
-\title{Server logic for the users & roles heatmap tab}
+\title{Server logic for the users heatmap tab}
 \usage{
-mod_heatmap_server(id, pv_con, registry)
+mod_heatmap_server(id, registry, refresh = shiny::reactive(NULL))
 }
 \arguments{
 \item{id}{module id.}
 
-\item{pv_con}{a reactive returning the current \code{\link[=pv_connect_registry]{pv_connect_registry()}} result.}
-
 \item{registry}{a reactive returning the current \code{\link[=pv_load_registry]{pv_load_registry()}} result.}
+
+\item{refresh}{a reactive (any value) bumped whenever logs should be
+re-read.}
 }
 \description{
-Server logic for the users & roles heatmap tab
+Server logic for the users heatmap tab
 }

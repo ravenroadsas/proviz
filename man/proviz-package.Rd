@@ -4,16 +4,15 @@
 \name{proviz-package}
 \alias{proviz}
 \alias{proviz-package}
-\title{proviz: Process Mining Analysis and Authoring Tools for protrace}
+\title{proviz: Process Mining Analysis and Authoring Tools}
 \description{
-Companion analysis package to
-\href{https://github.com/ravenroadsas/protrace}{protrace}. Currently
-provides \code{\link[=pv_scan_app]{pv_scan_app()}} and \code{\link[=pv_scan_custom_js]{pv_scan_custom_js()}} -- authoring aids
-for onboarding a new Shiny application, producing a candidate hook
-inventory for a human to map onto a business process. The eventlog ETL
-and analysis dashboard are planned but not yet built -- see protrace's
-process mining playbook (\code{doc/process_mining_playbook.md}) for the
-full picture.
+Turns a telemetry recorder's event logs into bupaR eventlogs and
+process-mining reports (see \code{\link[=run_pi_dashboard]{run_pi_dashboard()}}), against a registry
+of business processes and apps and their declared step diagrams (see
+\code{\link[=pv_load_registry]{pv_load_registry()}}). Also provides authoring aids for onboarding a
+new Shiny application -- \code{\link[=pv_scan_app]{pv_scan_app()}} and \code{\link[=pv_scan_custom_js]{pv_scan_custom_js()}}
+produce a candidate hook inventory for a human to map onto a step,
+via the companion registry editor app (\code{\link[=run_registry_editor]{run_registry_editor()}}).
 }
 \author{
 \strong{Maintainer}: Frenk Giorgetti \email{frenk.giorgetti@gmail.com}

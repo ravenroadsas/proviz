@@ -2,16 +2,16 @@
 % Please edit documentation in R/pv_kpis.R
 \name{pv_weekly_usage}
 \alias{pv_weekly_usage}
-\title{Cases started per calendar week}
+\title{Sessions started per calendar week}
 \usage{
-pv_weekly_usage(events)
+pv_weekly_usage(log)
 }
 \arguments{
-\item{events}{a case-linked events \code{data.frame}.}
+\item{log}{a \code{\link[=pv_pull_subprocess_log]{pv_pull_subprocess_log()}} result.}
 }
 \value{
 a \code{data.frame}, ordered by week: \code{week_start} (\code{Date}), \code{n_cases}.
 }
 \description{
-Cases started per calendar week
+Sessions started per calendar week
 }

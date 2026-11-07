@@ -1,23 +1,19 @@
+#' A minimal, real log CSV (the exact shape pv_pull_subprocess_log() reads)
+#' plus the registry rows that point at it, for tests that exercise the
+#' real read path rather than hand-building a log data.frame in memory.
 local_fixture_registry <- function(env = parent.frame()) {
-  skip_if_not_installed("protrace")
   dir <- withr::local_tempdir(.local_envir = env)
-  db_path <- file.path(dir, "typecurves.duckdb")
-
-  pt_con <- protrace::pt_connect(db_path, "reservoir_engineering", "Type Curve Construction", "type_curve_module")
-  protrace::pt_log_event(pt_con,
-    case_id = "CURVE-1", activity_id = "a", session_id = "s1", user_id = "alice",
-    occurred_at = as.POSIXct("2026-01-01 09:00:00", tz = "UTC")
-  )
-  protrace::pt_log_event(pt_con,
-    case_id = "CURVE-1", activity_id = "b", session_id = "s1", user_id = "alice",
-    occurred_at = as.POSIXct("2026-01-01 09:10:00", tz = "UTC")
-  )
-  protrace::pt_disconnect(pt_con)
+  log_path <- file.path(dir, "typecurves_log.csv")
+  writeLines(c(
+    "app_id,app_name,session_id,username,process,starttime,nclicks,total_weight",
+    "typecurves,Type Curves,s1,alice,a,2026-01-01T09:00:00.000Z,1,1",
+    "typecurves,Type Curves,s1,alice,b,2026-01-01T09:10:00.000Z,1,1"
+  ), log_path)
 
   subprocesses <- data.frame(
-    process_id = "type_curve_construction", app = "typecurves",
-    subprocess = "type_curve_module", step = "draft", step_label = "Draft",
-    step_order = 1L, app_order = 1L, duckdb_path = db_path, stringsAsFactors = FALSE
+    process_id = "type_curve_construction", subprocess = "type_curve_module", app = "typecurves",
+    app_link = NA_character_, log_path = log_path, adoption_threshold = NA_real_,
+    stringsAsFactors = FALSE
   )
 
   structure(
@@ -31,21 +27,20 @@ local_fixture_registry <- function(env = parent.frame()) {
         stringsAsFactors = FALSE
       ),
       subprocesses = subprocesses,
-      steps = pv_derive_steps(subprocesses),
-      ideal = list(
-        "type_curve_construction::type_curve_module" = structure(
-          list(
-            variants = list(c("a", "b")),
-            outcomes = data.frame(
-              id = "b_done", label = "B done", kind = "deliverable", activity_id = "b",
-              tier = NA_character_, outcome_tracking_app = NA_character_, outcome_tracking_join_key = NA_character_,
-              stringsAsFactors = FALSE
-            ),
-            outcome_exclusivity = "single"
-          ),
-          class = "pv_ideal_process"
+      process_diagrams = list(),
+      subprocess_diagrams = list(
+        "type_curve_construction::type_curve_module" = list(
+          steps = data.frame(id = c("a", "b"), label = c("A", "B"), stringsAsFactors = FALSE),
+          edges = data.frame(from_step = "a", to_step = "b", stringsAsFactors = FALSE),
+          outcomes = data.frame(
+            id = "b_done", label = "B done", kind = "deliverable", step_id = "b",
+            tier = NA_character_, outcome_tracking_app = NA_character_, outcome_tracking_join_key = NA_character_,
+            stringsAsFactors = FALSE
+          )
         )
-      )
+      ),
+      clicks = list(),
+      adoption_source = NULL
     ),
     class = "pv_registry"
   )

@@ -4,11 +4,9 @@
 \alias{pv_app_weekly_active_rate}
 \title{Week-by-week share of identified users exceeding the usage threshold}
 \usage{
-pv_app_weekly_active_rate(pv_con, registry, app, adoption)
+pv_app_weekly_active_rate(registry, app, adoption)
 }
 \arguments{
-\item{pv_con}{a \code{\link[=pv_connect_registry]{pv_connect_registry()}} result.}
-
 \item{registry}{a \code{\link[=pv_load_registry]{pv_load_registry()}} result.}
 
 \item{app}{an \code{app} value from \code{registry$subprocesses}.}
@@ -18,7 +16,7 @@ pv_app_weekly_active_rate(pv_con, registry, app, adoption)
 \value{
 a \code{data.frame}, ordered by week: \code{week} (\code{Date}), \code{pct_active}.
 Zero rows if this app has no adoption data, no declared
-\code{adoption_threshold}, or no events yet.
+\code{adoption_threshold}, or no log data yet.
 }
 \description{
 The one piece of IGA with real week-to-week granularity (training and

@@ -4,23 +4,21 @@
 \alias{pv_process_completion_rate}
 \title{Business process completion rate}
 \usage{
-pv_process_completion_rate(pv_con, registry, process_id)
+pv_process_completion_rate(registry, process_id)
 }
 \arguments{
-\item{pv_con}{a \code{\link[=pv_connect_registry]{pv_connect_registry()}} result.}
-
 \item{registry}{a \code{\link[=pv_load_registry]{pv_load_registry()}} result.}
 
 \item{process_id}{a \code{process_id} from \code{registry$processes}.}
 }
 \value{
-a list: \code{n_cases} (total distinct cases seen at the final
-step), \code{n_completed} (reached at least one outcome), \code{pct} (\code{NA} if
-\code{n_cases} is 0).
+a list: \code{n_cases} (total distinct sessions seen at the final
+subprocess(es)), \code{n_completed} (reached at least one outcome), \code{pct}
+(\code{NA} if \code{n_cases} is 0).
 }
 \description{
-A thin reshaping of \code{\link[=pv_business_outcome_distribution]{pv_business_outcome_distribution()}} into the
+A thin reshaping of \code{\link[=pv_process_outcome_distribution]{pv_process_outcome_distribution()}} into the
 single number the portfolio overview wants: what share of this
-process's cases (as seen at its final step) have reached \emph{any} named
-outcome yet, regardless of which one.
+process's cases (as seen at its final subprocess(es)) have reached
+\emph{any} named outcome yet, regardless of which one.
 }

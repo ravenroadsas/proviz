@@ -2,19 +2,12 @@
 % Please edit documentation in R/pv_correlations.R
 \name{pv_app_score_compliance_correlation}
 \alias{pv_app_score_compliance_correlation}
-\title{Correlation between a case's engagement score and its conformance,
+\title{Correlation between a session's engagement score and its conformance,
 for one app, pooled across every (process, subprocess) slot it occupies}
 \usage{
-pv_app_score_compliance_correlation(
-  pv_con,
-  registry,
-  app,
-  by = c("user", "app")
-)
+pv_app_score_compliance_correlation(registry, app, by = c("user", "app"))
 }
 \arguments{
-\item{pv_con}{a \code{\link[=pv_connect_registry]{pv_connect_registry()}} result.}
-
 \item{registry}{a \code{\link[=pv_load_registry]{pv_load_registry()}} result.}
 
 \item{app}{an \code{app} value from \code{registry$subprocesses}.}
@@ -27,5 +20,5 @@ same shape as \code{\link[=pv_score_compliance_correlation]{pv_score_compliance_
 \description{
 The app-centric counterpart to \code{\link[=pv_score_compliance_correlation]{pv_score_compliance_correlation()}} --
 built for the People tab's app picker, where the caller only has an
-\code{app} name, not a single \code{events}/\code{ideal_process} pair to hand in.
+\code{app} name, not a single \code{log}/\code{diagram} pair to hand in.
 }

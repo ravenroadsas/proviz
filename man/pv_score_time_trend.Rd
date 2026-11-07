@@ -4,11 +4,10 @@
 \alias{pv_score_time_trend}
 \title{Correlation between engagement score and time, per user or app-wide}
 \usage{
-pv_score_time_trend(scored_events, by = c("user", "app"))
+pv_score_time_trend(log, by = c("user", "app"))
 }
 \arguments{
-\item{scored_events}{a \code{\link[=pv_score_events]{pv_score_events()}} result (or any events
-\code{data.frame} with \code{timestamp}, \code{user_id}, \code{score} columns).}
+\item{log}{a \code{\link[=pv_pull_subprocess_log]{pv_pull_subprocess_log()}} result.}
 
 \item{by}{\code{"user"} (default, one row per user) or \code{"app"} (a single
 pooled value across every user).}
@@ -19,7 +18,8 @@ for \code{by = "user"}: a \code{data.frame}, most-observed first:
 For \code{by = "app"}: a list \code{list(r, n_weeks)}.
 }
 \description{
-Buckets scores into weeks and correlates the week's ordinal position
-against that week's total score -- a positive \code{r} means engagement is
-trending up over the observed period, negative means it's tailing off.
+Buckets \code{total_weight} into weeks and correlates the week's ordinal
+position against that week's total score -- a positive \code{r} means
+engagement is trending up over the observed period, negative means
+it's tailing off.
 }
