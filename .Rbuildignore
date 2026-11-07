@@ -3,3 +3,5 @@
 ^README\.md$
 ^NEWS\.md$
 ^data-raw$
+^app\.R$
+^app_registry_editor\.R$
