@@ -14,10 +14,12 @@
 #' @param process_id,subprocess identify the app via its registry row.
 #' @return a `data.frame`: `session_id`, `user_id`, `step_id`,
 #'   `started_at` (`POSIXct`), `nclicks`, `total_weight`, `app`. Zero rows
-#'   if this subprocess has no declared `log_path`, or the file doesn't
-#'   exist (an app not yet instrumented, or a mount that isn't live --
-#'   consistent with how the dashboard treats an unreachable store
-#'   elsewhere: skip it, don't fail the whole page).
+#'   if `process_id`/`subprocess` don't match a registry row (e.g. a
+#'   transient Shiny input mismatch while two linked dropdowns are
+#'   mid-update), if this subprocess has no declared `log_path`, or the
+#'   file doesn't exist (an app not yet instrumented, or a mount that
+#'   isn't live -- consistent with how the dashboard treats an
+#'   unreachable store elsewhere: skip it, don't fail the whole page).
 #' @export
 pv_pull_subprocess_log <- function(registry, process_id, subprocess) {
   stopifnot(inherits(registry, "pv_registry"))
@@ -25,7 +27,7 @@ pv_pull_subprocess_log <- function(registry, process_id, subprocess) {
     registry$subprocesses$process_id == process_id & registry$subprocesses$subprocess == subprocess,
   ]
   if (nrow(row) == 0) {
-    stop("proviz: subprocess '", subprocess, "' not found under process_id '", process_id, "'", call. = FALSE)
+    return(pv_empty_log())
   }
 
   log_path <- row$log_path[1]

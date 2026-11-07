@@ -14,10 +14,12 @@ pv_pull_subprocess_log(registry, process_id, subprocess)
 \value{
 a \code{data.frame}: \code{session_id}, \code{user_id}, \code{step_id},
 \code{started_at} (\code{POSIXct}), \code{nclicks}, \code{total_weight}, \code{app}. Zero rows
-if this subprocess has no declared \code{log_path}, or the file doesn't
-exist (an app not yet instrumented, or a mount that isn't live --
-consistent with how the dashboard treats an unreachable store
-elsewhere: skip it, don't fail the whole page).
+if \code{process_id}/\code{subprocess} don't match a registry row (e.g. a
+transient Shiny input mismatch while two linked dropdowns are
+mid-update), if this subprocess has no declared \code{log_path}, or the
+file doesn't exist (an app not yet instrumented, or a mount that
+isn't live -- consistent with how the dashboard treats an
+unreachable store elsewhere: skip it, don't fail the whole page).
 }
 \description{
 Reads the fourth artifact -- the actual recorded activity -- straight

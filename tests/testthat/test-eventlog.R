@@ -16,9 +16,12 @@ test_that("pv_pull_subprocess_log returns the empty schema when log_path is NA o
   expect_equal(nrow(log), 0)
 })
 
-test_that("pv_pull_subprocess_log errors clearly for an unknown subprocess", {
+test_that("pv_pull_subprocess_log returns the empty schema for an unrecognized process/subprocess combination", {
+  # Tolerated, not an error: Shiny's updateSelectInput() round-trip can leave
+  # two linked dropdowns transiently mismatched for one reactive tick.
   registry <- local_fixture_registry()
-  expect_error(pv_pull_subprocess_log(registry, "type_curve_construction", "nope"), "not found")
+  log <- pv_pull_subprocess_log(registry, "type_curve_construction", "nope")
+  expect_equal(nrow(log), 0)
 })
 
 test_that("pv_session_step_sequences orders each session's steps by started_at", {
