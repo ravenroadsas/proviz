@@ -68,7 +68,7 @@
       step: draft
       step_label: "Draft"
       step_order: 1
-      ideal_process: ideal_processes/type_curve_draft.yml
+      ideal_process: ../../inst/registry/ideal_processes/type_curve_draft.yml
       duckdb_path: /mnt/shared/apps/typecurves/protrace.duckdb
       adoption_threshold: 10
     - app: typecurve_review
@@ -76,7 +76,7 @@
       step: review
       step_label: "Review & Publish"
       step_order: 2
-      ideal_process: ideal_processes/type_curve_review.yml
+      ideal_process: ../../inst/registry/ideal_processes/type_curve_review.yml
       duckdb_path: /mnt/shared/apps/typecurve_review/protrace.duckdb
       adoption_threshold: 8
 
@@ -92,5 +92,5 @@
       step: surveillance
       step_label: "Surveillance"
       step_order: 1
-      ideal_process: ideal_processes/daily_production_surveillance.yml
+      ideal_process: ../../inst/registry/ideal_processes/daily_production_surveillance.yml
       adoption_threshold: 6

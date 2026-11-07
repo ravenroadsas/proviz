@@ -2,29 +2,32 @@
 #'
 #' The registry is the source of truth for the dashboard's portfolio
 #' overview and its coverage KPI: one row per target business process,
-#' whether or not it is instrumented yet (see `inst/registry/processes.yml`
-#' for the format and field meanings, and the process mining playbook's
-#' Step 1-3 for how a process gets added here).
+#' whether or not it is instrumented yet. It lives in a local DuckDB file
+#' (see [pv_registry_migrate_yaml()] for how the original hand-authored
+#' `processes.yml` is converted, and `data-raw/build_registry_db.R` for
+#' how the registry shipped with this package was produced), so a
+#' companion editor app can write into it a row at a time -- this
+#' function only reads it, read-only.
 #'
 #' A business process is composed of one or more ordered **steps**, and
 #' each step is carried out by one or more ordered **apps** (an app's own
 #' internal activities/variants/outcomes -- its own ideal process -- are
-#' declared per app, via that app's own `ideal_process:` entry, not at the
-#' business-process level: see [pv_load_ideal_process()]).
+#' declared per app, not at the business-process level: see
+#' [pv_load_ideal_process()]).
 #'
 #' By default the business-level "ideal flow" is just the step order
 #' itself, a single straight-through sequence (see [pv_step_sequence()]).
 #' A process whose real flow branches or loops back to an earlier step
 #' can instead declare `step_variants`: a list of acceptable step-slug
-#' sequences, mirroring how an app's own `ideal_process` declares
-#' multiple `variants` -- a branch is just two variants that share a
-#' prefix then diverge, and a loop is a variant that repeats a step slug.
-#' When present, this overrides the single `step_order`-derived sequence
-#' for conformance purposes; `step_order` still orders the step-flow
-#' display either way.
+#' sequences, mirroring how an app's own ideal process declares multiple
+#' `variants` -- a branch is just two variants that share a prefix then
+#' diverge, and a loop is a variant that repeats a step slug. When
+#' present, this overrides the single `step_order`-derived sequence for
+#' conformance purposes; `step_order` still orders the step-flow display
+#' either way.
 #'
-#' @param path path to a registry YAML file. Defaults to the registry
-#'   shipped with the package (`system.file("registry/processes.yml",
+#' @param path path to a registry DuckDB file. Defaults to the registry
+#'   shipped with the package (`system.file("registry/registry.duckdb",
 #'   package = "proviz")`) -- pass an explicit path to use a real
 #'   organization-specific registry instead.
 #' @return a `pv_registry` object (a list):
@@ -49,8 +52,8 @@
 #'       authored.}
 #'     \item{`$ideal`}{a named list, keyed by `"<process_id>::<subprocess>"`
 #'       (one entry per app, not per business process), of
-#'       [pv_load_ideal_process()] results -- `NULL` for an app with no
-#'       `ideal_process` entry or a missing file.}
+#'       [pv_load_ideal_process()]-shaped results -- `NULL` for an app with
+#'       no ideal process declared.}
 #'     \item{`$step_variants`}{a named list, keyed by `process_id`, of
 #'       declared acceptable step-label sequences (each a character
 #'       vector) -- absent (`NULL` via `[[`) for a process that didn't
@@ -60,162 +63,50 @@
 #'       conformance unscorable), in which case [pv_step_sequence()] falls
 #'       back to the single `step_order`-derived sequence.}
 #'     \item{`$adoption_source`}{path to the yearly training/satisfaction
-#'       Excel workbook (see [pv_load_adoption()]), resolved relative to
-#'       the registry file's own directory -- `NULL` if no entry declares
-#'       an `adoption_source` field. Only needs declaring once (on any one
-#'       process entry); it describes the whole portfolio, not one process.}
+#'       Excel workbook (see [pv_load_adoption()]) -- `NULL` if the
+#'       registry's `settings` table has no `adoption_source` row.}
 #'   }
 #' @export
-pv_load_registry <- function(path = system.file("registry/processes.yml", package = "proviz")) {
+pv_load_registry <- function(path = system.file("registry/registry.duckdb", package = "proviz")) {
   stopifnot(is.character(path), length(path) == 1, file.exists(path))
-  entries <- yaml::read_yaml(path)
-  if (!is.list(entries) || length(entries) == 0) {
-    stop("proviz: registry at '", path, "' is empty or not a list of process entries", call. = FALSE)
+  con <- DBI::dbConnect(duckdb::duckdb(), dbdir = path, read_only = TRUE)
+  on.exit(DBI::dbDisconnect(con, shutdown = TRUE), add = TRUE)
+
+  processes <- DBI::dbGetQuery(con, "SELECT * FROM processes ORDER BY process_id")
+  if (nrow(processes) == 0) {
+    stop("proviz: registry at '", path, "' declares no processes", call. = FALSE)
   }
 
-  required_fields <- c("process_id", "macroprocess", "process", "owner", "status", "loop_length")
-  valid_status <- c("not_started", "designed", "instrumented", "deprecated")
-  valid_loop_length <- c("short", "medium", "long")
-  base_dir <- dirname(normalizePath(path, mustWork = TRUE))
+  subprocesses <- DBI::dbGetQuery(con, "
+    SELECT process_id, app, subprocess, step, step_label, step_order, app_order,
+           duckdb_path, adoption_threshold
+    FROM subprocesses ORDER BY process_id, step_order, app_order")
 
-  processes <- list()
-  subprocesses <- list()
-  ideal <- list()
-  step_variants <- list()
-  adoption_source <- NULL
-
-  for (entry in entries) {
-    missing <- setdiff(required_fields, names(entry))
-    if (length(missing) > 0) {
-      stop("proviz: registry entry missing required field(s): ", paste(missing, collapse = ", "),
-        " (entry: ", deparse1_safe(entry), ")",
-        call. = FALSE
-      )
-    }
-    if (!entry$status %in% valid_status) {
-      stop("proviz: registry entry '", entry$process_id, "' has invalid status '", entry$status,
-        "' -- must be one of: ", paste(valid_status, collapse = ", "),
-        call. = FALSE
-      )
-    }
-    if (!entry$loop_length %in% valid_loop_length) {
-      stop("proviz: registry entry '", entry$process_id, "' has invalid loop_length '", entry$loop_length,
-        "' -- must be one of: ", paste(valid_loop_length, collapse = ", "),
-        call. = FALSE
-      )
-    }
-    if (!is.null(entry$ideal_process)) {
-      warning("proviz: registry entry '", entry$process_id, "' has a process-level 'ideal_process' field, ",
-        "which is no longer used -- each app now declares its own 'ideal_process' on its subprocess entry. Ignoring it.",
-        call. = FALSE
-      )
-    }
-    # adoption_source (the yearly training/satisfaction Excel path) describes
-    # the whole portfolio, not any one process -- it only needs declaring on
-    # one entry, but is harmless to repeat; the first non-NULL one found wins.
-    if (is.null(adoption_source) && !is.null(entry$adoption_source)) {
-      adoption_source <- file.path(base_dir, entry$adoption_source)
-    }
-
-    processes[[length(processes) + 1]] <- data.frame(
-      process_id = entry$process_id, macroprocess = entry$macroprocess,
-      process = entry$process, owner = entry$owner, status = entry$status,
-      loop_length = entry$loop_length,
-      stringsAsFactors = FALSE
+  instrumented_empty <- setdiff(
+    processes$process_id[processes$status == "instrumented"],
+    unique(subprocesses$process_id)
+  )
+  for (pid in instrumented_empty) {
+    warning("proviz: registry entry '", pid,
+      "' is status 'instrumented' but declares no subprocesses -- it will contribute no data",
+      call. = FALSE
     )
-
-    subs <- entry$subprocesses %||% list()
-    if (entry$status == "instrumented" && length(subs) == 0) {
-      warning("proviz: registry entry '", entry$process_id,
-        "' is status 'instrumented' but declares no subprocesses -- it will contribute no data",
-        call. = FALSE
-      )
-    }
-
-    step_counters <- list()
-    for (s in subs) {
-      # duckdb_path is only meaningful once there's a real store to attach --
-      # a not-yet-instrumented process can still declare which app(s) it
-      # will live in, and which step each belongs to, as soon as that's
-      # scoped (playbook step 2-3), before any instrumentation (step 4)
-      # exists.
-      required_sub_fields <- c("app", "subprocess", "step", "step_order")
-      if (entry$status == "instrumented") required_sub_fields <- c(required_sub_fields, "duckdb_path")
-      sub_missing <- setdiff(required_sub_fields, names(s))
-      if (length(sub_missing) > 0) {
-        stop("proviz: a subprocess entry under '", entry$process_id,
-          "' is missing required field(s): ", paste(sub_missing, collapse = ", "),
-          call. = FALSE
-        )
-      }
-
-      step_counters[[s$step]] <- (step_counters[[s$step]] %||% 0L) + 1L
-
-      subprocesses[[length(subprocesses) + 1]] <- data.frame(
-        process_id = entry$process_id, app = s$app, subprocess = s$subprocess,
-        step = s$step, step_label = s$step_label %||% pv_prettify_label(s$step),
-        step_order = as.integer(s$step_order), app_order = as.integer(s$app_order %||% step_counters[[s$step]]),
-        duckdb_path = s$duckdb_path %||% NA_character_,
-        adoption_threshold = as.numeric(s$adoption_threshold %||% NA_real_),
-        stringsAsFactors = FALSE
-      )
-
-      ideal_key <- paste(entry$process_id, s$subprocess, sep = "::")
-      if (!is.null(s$ideal_process)) {
-        ideal_path <- file.path(base_dir, s$ideal_process)
-        if (file.exists(ideal_path)) {
-          ideal[[ideal_key]] <- pv_load_ideal_process(ideal_path)
-        } else {
-          warning("proviz: ideal_process file for '", ideal_key, "' not found at '", ideal_path, "'",
-            call. = FALSE
-          )
-          ideal[[ideal_key]] <- NULL
-        }
-      } else {
-        ideal[[ideal_key]] <- NULL
-      }
-    }
-
-    # An empty `step_variants: []` is treated the same as omitting the
-    # field entirely (falls back to the step_order-derived sequence in
-    # pv_step_sequence()) -- not as "zero acceptable paths", which would
-    # silently make conformance unscorable (NA) for every case.
-    if (!is.null(entry$step_variants) && length(entry$step_variants) > 0) {
-      step_label_by_slug <- stats::setNames(
-        vapply(subs, function(s) s$step_label %||% pv_prettify_label(s$step), character(1)),
-        vapply(subs, function(s) s$step, character(1))
-      )
-      step_label_by_slug <- step_label_by_slug[!duplicated(names(step_label_by_slug))]
-
-      declared <- lapply(entry$step_variants, function(v) as.character(unlist(v)))
-      unknown <- unique(unlist(lapply(declared, setdiff, y = names(step_label_by_slug))))
-      if (length(unknown) > 0) {
-        stop("proviz: registry entry '", entry$process_id,
-          "' has step_variants referencing unknown step(s): ", paste(unknown, collapse = ", "),
-          call. = FALSE
-        )
-      }
-      step_variants[[entry$process_id]] <- lapply(declared, function(v) unname(step_label_by_slug[v]))
-    }
   }
 
-  processes <- do.call(rbind, processes)
-  if (anyDuplicated(processes$process_id) != 0) {
-    dupes <- unique(processes$process_id[duplicated(processes$process_id)])
-    stop("proviz: registry has duplicate process_id(s): ", paste(dupes, collapse = ", "), call. = FALSE)
-  }
-  rownames(processes) <- NULL
+  ideal <- pv_registry_db_read_ideal(con, subprocesses)
+  step_variants <- pv_registry_db_read_step_variants(con, subprocesses)
 
-  subprocesses <- if (length(subprocesses) > 0) {
-    do.call(rbind, subprocesses)
+  settings <- DBI::dbGetQuery(con, "SELECT * FROM settings")
+  adoption_source <- settings$value[settings$key == "adoption_source"]
+  adoption_source <- if (length(adoption_source) == 0) {
+    NULL
   } else {
-    data.frame(
-      process_id = character(0), app = character(0), subprocess = character(0),
-      step = character(0), step_label = character(0), step_order = integer(0), app_order = integer(0),
-      duckdb_path = character(0), adoption_threshold = numeric(0), stringsAsFactors = FALSE
-    )
+    # Resolved relative to the registry database's own directory, the same
+    # way the old YAML-based registry resolved it relative to the YAML
+    # file's directory -- keeps the value relocatable rather than baking
+    # in an absolute path at migration time.
+    file.path(dirname(normalizePath(path, mustWork = TRUE)), adoption_source[1])
   }
-  rownames(subprocesses) <- NULL
 
   structure(
     list(
@@ -224,6 +115,85 @@ pv_load_registry <- function(path = system.file("registry/processes.yml", packag
     ),
     class = "pv_registry"
   )
+}
+
+#' Read every app's ideal process (`activities`/`variants`/`outcomes`) out
+#' of the registry database, keyed the same way [pv_load_registry()]'s
+#' `$ideal` always has been: `"<process_id>::<subprocess>"`.
+#' @noRd
+pv_registry_db_read_ideal <- function(con, subprocesses) {
+  ideal_meta <- DBI::dbGetQuery(con, "SELECT * FROM ideal_processes")
+  activities_all <- DBI::dbGetQuery(con, "SELECT * FROM activities")
+  variant_steps_all <- DBI::dbGetQuery(con, "SELECT * FROM variant_steps ORDER BY variant_no, step_no")
+  outcomes_all <- DBI::dbGetQuery(con, "SELECT * FROM outcomes")
+
+  ideal <- list()
+  for (i in seq_len(nrow(subprocesses))) {
+    pid <- subprocesses$process_id[i]
+    sp <- subprocesses$subprocess[i]
+    ideal_key <- paste(pid, sp, sep = "::")
+
+    meta_row <- ideal_meta[ideal_meta$process_id == pid & ideal_meta$subprocess == sp, ]
+    if (nrow(meta_row) == 0) {
+      ideal[[ideal_key]] <- NULL
+      next
+    }
+
+    act <- activities_all[activities_all$process_id == pid & activities_all$subprocess == sp,
+      c("activity_id", "label", "role", "score")]
+    names(act)[names(act) == "activity_id"] <- "id"
+    rownames(act) <- NULL
+
+    vs <- variant_steps_all[variant_steps_all$process_id == pid & variant_steps_all$subprocess == sp, ]
+    variants <- pv_registry_db_ordered_groups(vs, "activity_id")
+
+    oc <- outcomes_all[outcomes_all$process_id == pid & outcomes_all$subprocess == sp,
+      c("outcome_id", "label", "kind", "activity_id", "tier", "outcome_tracking_app", "outcome_tracking_join_key")]
+    names(oc)[names(oc) == "outcome_id"] <- "id"
+    rownames(oc) <- NULL
+
+    ideal[[ideal_key]] <- structure(
+      list(
+        process_id = meta_row$ideal_process_id[1] %||% pid,
+        activities = act, variants = variants, outcomes = oc,
+        outcome_exclusivity = meta_row$outcome_exclusivity[1]
+      ),
+      class = "pv_ideal_process"
+    )
+  }
+  ideal
+}
+
+#' Translate the registry database's `step_variants` rows (declared as
+#' step slugs, one row per `(process_id, variant_no, step_no)`) into the
+#' same named-list-of-step-label-sequences shape
+#' [pv_load_registry()]'s `$step_variants` has always had.
+#' @noRd
+pv_registry_db_read_step_variants <- function(con, subprocesses) {
+  rows <- DBI::dbGetQuery(con, "SELECT * FROM step_variants ORDER BY process_id, variant_no, step_no")
+  step_variants <- list()
+  for (pid in unique(rows$process_id)) {
+    subs_p <- subprocesses[subprocesses$process_id == pid, ]
+    step_label_by_slug <- stats::setNames(subs_p$step_label, subs_p$step)
+    step_label_by_slug <- step_label_by_slug[!duplicated(names(step_label_by_slug))]
+
+    declared <- pv_registry_db_ordered_groups(rows[rows$process_id == pid, ], "step")
+    step_variants[[pid]] <- lapply(declared, function(v) unname(step_label_by_slug[v]))
+  }
+  step_variants
+}
+
+#' Group a `variant_no`/`step_no`-ordered data.frame by `variant_no` into
+#' a list of `value_col` vectors, ordered by `variant_no` (not by its
+#' character sort order, which `split()` would otherwise give for 10+
+#' variants) and then by `step_no` within each.
+#' @noRd
+pv_registry_db_ordered_groups <- function(df, value_col) {
+  if (nrow(df) == 0) return(list())
+  groups <- split(df, df$variant_no)
+  groups <- groups[order(as.integer(names(groups)))]
+  result <- lapply(groups, function(g) g[[value_col]][order(g$step_no)])
+  unname(result)
 }
 
 #' @noRd

@@ -5,12 +5,12 @@
 \title{Load and validate the process registry}
 \usage{
 pv_load_registry(
-  path = system.file("registry/processes.yml", package = "proviz")
+  path = system.file("registry/registry.duckdb", package = "proviz")
 )
 }
 \arguments{
-\item{path}{path to a registry YAML file. Defaults to the registry
-shipped with the package (\code{system.file("registry/processes.yml", package = "proviz")}) -- pass an explicit path to use a real
+\item{path}{path to a registry DuckDB file. Defaults to the registry
+shipped with the package (\code{system.file("registry/registry.duckdb", package = "proviz")}) -- pass an explicit path to use a real
 organization-specific registry instead.}
 }
 \value{
@@ -36,8 +36,8 @@ component). Zero rows for a process with no app scoped yet.}
 authored.}
 \item{\verb{$ideal}}{a named list, keyed by \code{"<process_id>::<subprocess>"}
 (one entry per app, not per business process), of
-\code{\link[=pv_load_ideal_process]{pv_load_ideal_process()}} results -- \code{NULL} for an app with no
-\code{ideal_process} entry or a missing file.}
+\code{\link[=pv_load_ideal_process]{pv_load_ideal_process()}}-shaped results -- \code{NULL} for an app with
+no ideal process declared.}
 \item{\verb{$step_variants}}{a named list, keyed by \code{process_id}, of
 declared acceptable step-label sequences (each a character
 vector) -- absent (\code{NULL} via \code{[[}) for a process that didn't
@@ -47,34 +47,35 @@ not as "zero acceptable paths" -- the latter would silently make
 conformance unscorable), in which case \code{\link[=pv_step_sequence]{pv_step_sequence()}} falls
 back to the single \code{step_order}-derived sequence.}
 \item{\verb{$adoption_source}}{path to the yearly training/satisfaction
-Excel workbook (see \code{\link[=pv_load_adoption]{pv_load_adoption()}}), resolved relative to
-the registry file's own directory -- \code{NULL} if no entry declares
-an \code{adoption_source} field. Only needs declaring once (on any one
-process entry); it describes the whole portfolio, not one process.}
+Excel workbook (see \code{\link[=pv_load_adoption]{pv_load_adoption()}}) -- \code{NULL} if the
+registry's \code{settings} table has no \code{adoption_source} row.}
 }
 }
 \description{
 The registry is the source of truth for the dashboard's portfolio
 overview and its coverage KPI: one row per target business process,
-whether or not it is instrumented yet (see \code{inst/registry/processes.yml}
-for the format and field meanings, and the process mining playbook's
-Step 1-3 for how a process gets added here).
+whether or not it is instrumented yet. It lives in a local DuckDB file
+(see \code{\link[=pv_registry_migrate_yaml]{pv_registry_migrate_yaml()}} for how the original hand-authored
+\code{processes.yml} is converted, and \code{data-raw/build_registry_db.R} for
+how the registry shipped with this package was produced), so a
+companion editor app can write into it a row at a time -- this
+function only reads it, read-only.
 }
 \details{
 A business process is composed of one or more ordered \strong{steps}, and
 each step is carried out by one or more ordered \strong{apps} (an app's own
 internal activities/variants/outcomes -- its own ideal process -- are
-declared per app, via that app's own \verb{ideal_process:} entry, not at the
-business-process level: see \code{\link[=pv_load_ideal_process]{pv_load_ideal_process()}}).
+declared per app, not at the business-process level: see
+\code{\link[=pv_load_ideal_process]{pv_load_ideal_process()}}).
 
 By default the business-level "ideal flow" is just the step order
 itself, a single straight-through sequence (see \code{\link[=pv_step_sequence]{pv_step_sequence()}}).
 A process whose real flow branches or loops back to an earlier step
 can instead declare \code{step_variants}: a list of acceptable step-slug
-sequences, mirroring how an app's own \code{ideal_process} declares
-multiple \code{variants} -- a branch is just two variants that share a
-prefix then diverge, and a loop is a variant that repeats a step slug.
-When present, this overrides the single \code{step_order}-derived sequence
-for conformance purposes; \code{step_order} still orders the step-flow
-display either way.
+sequences, mirroring how an app's own ideal process declares multiple
+\code{variants} -- a branch is just two variants that share a prefix then
+diverge, and a loop is a variant that repeats a step slug. When
+present, this overrides the single \code{step_order}-derived sequence for
+conformance purposes; \code{step_order} still orders the step-flow display
+either way.
 }

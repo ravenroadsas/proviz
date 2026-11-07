@@ -10,9 +10,9 @@
 #' adoption tab (the IGA index per app, from the registry's
 #' `adoption_source` workbook -- see [pv_load_adoption()]).
 #'
-#' @param registry_path path to a registry YAML (see [pv_load_registry()]).
-#'   Ignored if `demo = TRUE`. Defaults to the registry shipped with the
-#'   package.
+#' @param registry_path path to a registry DuckDB file (see
+#'   [pv_load_registry()]). Ignored if `demo = TRUE`. Defaults to the
+#'   registry shipped with the package.
 #' @param demo if `TRUE`, ignore `registry_path` and run against synthetic
 #'   data from [pv_demo_registry()] instead -- for trying the dashboard out
 #'   without a real shared mount or real application data.
@@ -23,7 +23,7 @@ run_pi_dashboard <- function(registry_path = NULL, demo = FALSE, ...) {
   registry <- if (demo) {
     pv_demo_registry()
   } else {
-    pv_load_registry(registry_path %||% system.file("registry/processes.yml", package = "proviz"))
+    pv_load_registry(registry_path %||% system.file("registry/registry.duckdb", package = "proviz"))
   }
 
   app <- shiny::shinyApp(ui = app_ui(), server = app_server(registry))

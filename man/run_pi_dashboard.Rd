@@ -7,9 +7,9 @@
 run_pi_dashboard(registry_path = NULL, demo = FALSE, ...)
 }
 \arguments{
-\item{registry_path}{path to a registry YAML (see \code{\link[=pv_load_registry]{pv_load_registry()}}).
-Ignored if \code{demo = TRUE}. Defaults to the registry shipped with the
-package.}
+\item{registry_path}{path to a registry DuckDB file (see
+\code{\link[=pv_load_registry]{pv_load_registry()}}). Ignored if \code{demo = TRUE}. Defaults to the
+registry shipped with the package.}
 
 \item{demo}{if \code{TRUE}, ignore \code{registry_path} and run against synthetic
 data from \code{\link[=pv_demo_registry]{pv_demo_registry()}} instead -- for trying the dashboard out
