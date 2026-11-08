@@ -1,6 +1,6 @@
 local_fixture_db <- function(env = parent.frame()) {
   db_path <- withr::local_tempfile(fileext = ".duckdb", .local_envir = env)
-  con <- DBI::dbConnect(duckdb::duckdb(), dbdir = db_path)
+  con <- pv_registry_db_connect(db_path)
   pv_registry_db_create_schema(con)
   DBI::dbDisconnect(con, shutdown = TRUE)
   db_path
@@ -93,4 +93,18 @@ test_that("pv_registry_db_set_adoption_source upserts the settings row", {
 
   pv_registry_db_set_adoption_source(db_path, "adoption_v2.xlsx")
   expect_equal(pv_load_registry(db_path)$adoption_source, file.path(dirname(db_path), "adoption_v2.xlsx"))
+})
+
+test_that("pv_registry_db_connect() pins a widely-readable on-disk storage version", {
+  # Regression test for a real failure: a registry checkpointed by this
+  # package's own (newer) DuckDB build could fail to open at all in an
+  # older install ("Trying to read a database file with version number
+  # 999, but we can only read versions between 64 and 68"). DuckDB's
+  # file header is 8 checksum bytes, then the 4-byte "DUCK" magic, then
+  # an 8-byte little-endian storage version number -- 64 is what
+  # storage_compatibility_version = "v0.10.2" (see pv_registry_db.R)
+  # is documented to write.
+  db_path <- local_fixture_db()
+  header <- readBin(db_path, "raw", n = 20)
+  expect_equal(readBin(header[13:20], "integer", n = 1, size = 8), 64)
 })

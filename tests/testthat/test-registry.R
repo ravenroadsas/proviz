@@ -1,6 +1,6 @@
 local_fixture_db <- function(env = parent.frame()) {
   db_path <- withr::local_tempfile(fileext = ".duckdb", .local_envir = env)
-  con <- DBI::dbConnect(duckdb::duckdb(), dbdir = db_path)
+  con <- pv_registry_db_connect(db_path)
   pv_registry_db_create_schema(con)
   DBI::dbDisconnect(con, shutdown = TRUE)
   db_path
@@ -98,7 +98,7 @@ test_that("pv_load_registry resolves adoption_source relative to the registry db
   dir <- withr::local_tempdir()
   db_path <- file.path(dir, "sub", "registry.duckdb")
   dir.create(dirname(db_path))
-  con <- DBI::dbConnect(duckdb::duckdb(), dbdir = db_path)
+  con <- pv_registry_db_connect(db_path)
   pv_registry_db_create_schema(con)
   DBI::dbDisconnect(con, shutdown = TRUE)
   pv_registry_db_insert_process(db_path, "p1", "mp1", "Proc One", "owner", "not_started", "short")

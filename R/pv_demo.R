@@ -27,7 +27,7 @@ pv_demo_registry <- function(dir = tempfile("proviz_demo_"), seed = 42) {
   set.seed(seed)
 
   db_path <- file.path(dir, "registry.duckdb")
-  con <- DBI::dbConnect(duckdb::duckdb(), dbdir = db_path)
+  con <- pv_registry_db_connect(db_path)
   pv_registry_db_create_schema(con)
   DBI::dbDisconnect(con, shutdown = TRUE)
 

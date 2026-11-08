@@ -36,6 +36,12 @@
 #' Idempotent -- `CREATE TABLE IF NOT EXISTS`, safe to call against an
 #' already-populated database.
 #'
+#' `con` must come from [pv_registry_db_connect()] (or otherwise pass
+#' the same `storage_compatibility_version` connection `config` --
+#' DuckDB fixes a file's on-disk format at the connection that first
+#' creates it, not at a later `SET`, so this can't be pinned here once
+#' `con` already exists).
+#'
 #' @param con a DBI connection to a DuckDB database.
 #' @return `con`, invisibly.
 #' @noRd
@@ -153,9 +159,34 @@ pv_registry_db_create_schema <- function(con) {
 ## don't contend for the database file any longer than one edit takes.
 ## -------------------------------------------------------------------------
 
+#' The DuckDB storage format version this package writes, pinned well
+#' below whatever this session's own DuckDB build happens to default to.
+#' Without this, a registry checkpointed by a newer DuckDB build can
+#' fail to open entirely in an older (even recent-stable) install:
+#' "Trying to read a database file with version number 999, but we can
+#' only read versions between 64 and 68" is that exact failure, hit in
+#' the wild against a registry this package's own dev environment had
+#' written. `v0.10.2` is deliberately old (mid-2024) -- this schema
+#' uses none of the storage features added since, so there's no reason
+#' not to maximize how far back a reader can be and still open the file.
+#'
+#' DuckDB fixes a file's on-disk storage version at the connection that
+#' first creates it, not at a later `SET storage_compatibility_version`
+#' -- confirmed directly (a post-connect `SET` left the header
+#' unchanged; passing it as connection `config` at `dbConnect()` time is
+#' what actually took effect). So this must be passed into every
+#' *write* connection's `config` -- there's no way to retrofix it once
+#' `con` already exists, which is also why [pv_registry_db_create_schema()]
+#' can't pin it itself.
+#' @noRd
+.pv_registry_db_write_config <- list(storage_compatibility_version = "v0.10.2")
+
 #' @noRd
 pv_registry_db_connect <- function(path, read_only = FALSE) {
-  DBI::dbConnect(duckdb::duckdb(), dbdir = path, read_only = read_only)
+  DBI::dbConnect(
+    duckdb::duckdb(), dbdir = path, read_only = read_only,
+    config = if (read_only) list() else .pv_registry_db_write_config
+  )
 }
 
 #' Add a business process to the registry
