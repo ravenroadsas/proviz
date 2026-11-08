@@ -26,3 +26,16 @@ test_that("pv_outcomes_display_table still labels a populated kind/tier correctl
   expect_match(display$Kind, "Decision")
   expect_match(display$Tier, "Tactical")
 })
+
+test_that("pv_cell_bar renders an optional sub_label caption below the bar", {
+  with_sub <- pv_cell_bar("60%", 60, "Feb 2026")
+  expect_match(with_sub, '<span class="pv-cellbar-sub">Feb 2026</span>', fixed = TRUE)
+
+  without_sub <- pv_cell_bar("60%", 60)
+  expect_false(grepl("pv-cellbar-sub", without_sub, fixed = TRUE))
+})
+
+test_that("pv_cell_bar ignores sub_label when the value itself is NA", {
+  empty <- pv_cell_bar(NA_character_, NA_real_, "Feb 2026")
+  expect_equal(empty, '<span class="pv-cellbar-empty">--</span>')
+})

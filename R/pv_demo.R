@@ -55,7 +55,8 @@ pv_demo_registry <- function(dir = tempfile("proviz_demo_"), seed = 42) {
     # Identified but never logged-in users -- real organizations always have
     # a few, and they're what keeps the usage component below 100%.
     extra_untrained_inactive = list(typecurves = "p.silva", typecurve_review = "s.khan", surveillance = "e.ortiz"),
-    satisfaction = c(typecurves = 88, typecurve_review = 92, surveillance = 71)
+    satisfaction = c(typecurves = 88, typecurve_review = 92, surveillance = 71),
+    as_of = c(typecurves = "2026-02-01", typecurve_review = "2026-02-01", surveillance = "2026-01-15")
   )
   pv_registry_db_set_adoption_source(db_path, basename(adoption_path))
 
@@ -261,10 +262,13 @@ pv_demo_seed_user_roles <- function(db_path) {
 
 #' Write a synthetic yearly training/satisfaction adoption workbook, one
 #' sheet per demo app (see [pv_load_adoption()])
+#' @param as_of named character vector (one `"YYYY-MM-DD"` per app) --
+#'   when this yearly snapshot was taken, so the dashboard has something
+#'   real to caption each indicator with.
 #' @noRd
 pv_demo_seed_adoption_workbook <- function(dir, draft_users, draft_untrained, review_users, review_untrained,
                                             surveillance_users, surveillance_untrained,
-                                            extra_untrained_inactive, satisfaction) {
+                                            extra_untrained_inactive, satisfaction, as_of) {
   if (!requireNamespace("openxlsx", quietly = TRUE)) {
     stop("proviz: pv_demo_registry() needs the 'openxlsx' package (Suggests) to write the synthetic adoption workbook.", call. = FALSE)
   }
@@ -280,9 +284,9 @@ pv_demo_seed_adoption_workbook <- function(dir, draft_users, draft_untrained, re
   path <- file.path(dir, "adoption.xlsx")
   openxlsx::write.xlsx(
     list(
-      typecurves = cbind(sheet_for(draft_users, draft_untrained, extra_untrained_inactive$typecurves), satisfaction = satisfaction[["typecurves"]]),
-      typecurve_review = cbind(sheet_for(review_users, review_untrained, extra_untrained_inactive$typecurve_review), satisfaction = satisfaction[["typecurve_review"]]),
-      surveillance = cbind(sheet_for(surveillance_users, surveillance_untrained, extra_untrained_inactive$surveillance), satisfaction = satisfaction[["surveillance"]])
+      typecurves = cbind(sheet_for(draft_users, draft_untrained, extra_untrained_inactive$typecurves), satisfaction = satisfaction[["typecurves"]], as_of = as_of[["typecurves"]]),
+      typecurve_review = cbind(sheet_for(review_users, review_untrained, extra_untrained_inactive$typecurve_review), satisfaction = satisfaction[["typecurve_review"]], as_of = as_of[["typecurve_review"]]),
+      surveillance = cbind(sheet_for(surveillance_users, surveillance_untrained, extra_untrained_inactive$surveillance), satisfaction = satisfaction[["surveillance"]], as_of = as_of[["surveillance"]])
     ),
     file = path
   )

@@ -101,7 +101,7 @@ mod_app_detail_server <- function(id, registry, refresh = shiny::reactive(NULL),
     output$no_data_note <- shiny::renderUI({
       if (is.null(app())) {
         return(bslib::card(
-          bslib::card_body("No app is monitored yet -- pick a business process with a monitored app in the sidebar filters.", class = "text-muted")
+          bslib::card_body("Pick an app in the sidebar filters to see its detail.", class = "text-muted")
         ))
       }
       if (nrow(raw_log()) == 0) {

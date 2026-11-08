@@ -23,13 +23,13 @@ test_that("mod_app_detail_server computes KPIs and variants once an app is picke
   })
 })
 
-test_that("mod_app_detail_server shows its no-data note when no app is monitored yet", {
+test_that("mod_app_detail_server shows its no-data note when no app is picked (incl. '(All Apps)')", {
   registry <- local_fixture_registry()
 
   shiny::testServer(mod_app_detail_server, args = list(
     registry = shiny::reactiveVal(registry), app = shiny::reactiveVal(NULL)
   ), {
     session$flushReact()
-    expect_true(any(grepl("No app is monitored yet", as.character(output$no_data_note), fixed = TRUE)))
+    expect_true(any(grepl("Pick an app in the sidebar filters", as.character(output$no_data_note), fixed = TRUE)))
   })
 })

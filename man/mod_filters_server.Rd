@@ -24,7 +24,9 @@ no filter.}
 \item{\code{process_id}}{a reactive giving the selected \code{process_id}, or
 a sentinel value (never a real \code{process_id}) for "(All processes)".}
 \item{\code{app}}{a reactive giving \code{list(process_id, subprocess)} for
-the selected app, or \code{NULL} if nothing is monitored yet.}
+the selected app, or \code{NULL} for "(All Apps)" (the default) or
+when nothing is monitored yet -- a tab that needs one concrete
+app degrades to its own "nothing picked" empty state either way.}
 \item{\code{set_process}}{a plain function, \code{set_process(process_id)} --
 jumps the shared picker to a process (e.g. from
 \code{\link[=mod_overview_server]{mod_overview_server()}}'s "Open business process").}

@@ -86,7 +86,8 @@ pv_theme <- function() {
     .pv-cellbar-track { height: 5px; background: %s; border-radius: 3px; overflow: hidden; }
     .pv-cellbar-fill { height: 100%%; background: %s; border-radius: 3px; }
     .pv-cellbar-empty { color: %s; }
-  ", .pv_ink, .pv_track_bg, .pv_accent, .pv_ink_muted)
+    .pv-cellbar-sub { font-size: 0.72rem; color: %s; }
+  ", .pv_ink, .pv_track_bg, .pv_accent, .pv_ink_muted, .pv_ink_muted)
 
   bslib::bs_theme(
     version = 5, base_font = bslib::font_google("Inter"),
@@ -176,15 +177,20 @@ pv_monitored_badge <- function(monitored) {
 #' @param pct the bar's fill, 0-100 (clamped); `NA` renders as a plain dash.
 #'   For a naturally 0-100 value (a percentage) pass it directly; for a
 #'   raw count, scale it relative to the column's max first (see callers).
+#' @param sub_label optional small caption below the bar (e.g. a
+#'   reference date the figure above is as of) -- omitted (`NA`, the
+#'   default) for no caption, including whenever `value_label`/`pct` are
+#'   themselves `NA` (a bare "--" has nothing to date).
 #' @noRd
-pv_cell_bar <- function(value_label, pct) {
+pv_cell_bar <- function(value_label, pct, sub_label = NA_character_) {
   if (is.na(value_label) || is.na(pct)) {
     return('<span class="pv-cellbar-empty">--</span>')
   }
   pct <- max(0, min(100, pct))
+  sub_html <- if (is.na(sub_label)) "" else sprintf('<span class="pv-cellbar-sub">%s</span>', sub_label)
   sprintf(
-    '<div class="pv-cellbar"><span class="pv-cellbar-value">%s</span><div class="pv-cellbar-track"><div class="pv-cellbar-fill" style="width:%s%%;"></div></div></div>',
-    value_label, pct
+    '<div class="pv-cellbar"><span class="pv-cellbar-value">%s</span><div class="pv-cellbar-track"><div class="pv-cellbar-fill" style="width:%s%%;"></div></div>%s</div>',
+    value_label, pct, sub_html
   )
 }
 

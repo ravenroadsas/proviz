@@ -14,16 +14,19 @@ app names to look for among the workbook's sheets.}
 }
 \value{
 a named list, keyed by \code{app}: each entry a list with \code{users}
-(a \code{data.frame}: \code{user_id}, \code{trained}) and \code{satisfaction} (a single
+(a \code{data.frame}: \code{user_id}, \code{trained}), \code{satisfaction} (a single
 numeric value, \code{NA} if the sheet has no usable \code{satisfaction}
-column). An app with no matching sheet is simply absent (\code{NULL} via
-\code{[[}).
+column), and \code{as_of} (a single \code{Date}, \code{NA} if the sheet has no
+usable \code{as_of} column or it doesn't parse as a date). An app with no
+matching sheet is simply absent (\code{NULL} via \code{[[}).
 }
 \description{
 One sheet per app (see \code{\link[=pv_load_registry]{pv_load_registry()}}'s \code{adoption_source} field,
 typically passed here as \code{path}): a row per identified user with their
 \code{user_id} and whether they were \code{trained} (\code{TRUE}/\code{FALSE}), plus a
-\code{satisfaction} column holding one app-wide value -- the same number can
+\code{satisfaction} column holding one app-wide value, and optionally an
+\code{as_of} column (also one app-wide value, so the dashboard can show
+\emph{when} this yearly snapshot was taken) -- for both, the same value can
 be repeated down every row or present just once; either way the first
 non-NA value found is used (more than one \emph{distinct} value is a
 warning, not an error, since this is an externally-authored

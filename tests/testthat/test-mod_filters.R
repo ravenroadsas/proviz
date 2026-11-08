@@ -88,6 +88,28 @@ test_that("mod_filters_server's app() parses the selected 'process_id::subproces
   })
 })
 
+test_that("mod_filters_server's app_choices() always leads with the '(All Apps)' sentinel", {
+  registry <- local_fixture_registry()
+
+  shiny::testServer(mod_filters_server, args = list(registry = shiny::reactiveVal(registry)), {
+    session$flushReact()
+    session$setInputs(process_picker = .pv_all_processes_sentinel)
+    choices <- app_choices()
+    expect_equal(unname(choices[1]), .pv_all_apps_sentinel)
+    expect_equal(names(choices)[1], "(All Apps)")
+  })
+})
+
+test_that("mod_filters_server's app() returns NULL for the '(All Apps)' sentinel", {
+  registry <- local_fixture_registry()
+
+  shiny::testServer(mod_filters_server, args = list(registry = shiny::reactiveVal(registry)), {
+    session$flushReact()
+    session$setInputs(app_picker = .pv_all_apps_sentinel)
+    expect_null(session$returned$app())
+  })
+})
+
 test_that("mod_filters_server's set_process/set_app are callable without error (client echo is testServer's known limitation)", {
   registry <- local_fixture_registry()
 

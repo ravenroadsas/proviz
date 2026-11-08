@@ -13,7 +13,8 @@ pv_portfolio_iga(registry, adoption)
 }
 \value{
 a \code{data.frame}, one row per distinct \code{app}: \code{app}, \code{pct_trained},
-\code{satisfaction}, \code{pct_active}, \code{iga}, \code{n_users}.
+\code{satisfaction}, \code{pct_active}, \code{iga}, \code{n_users}, \code{snapshot_as_of},
+\code{active_as_of} (see \code{\link[=pv_app_iga]{pv_app_iga()}}).
 }
 \description{
 IGA for every app in the registry

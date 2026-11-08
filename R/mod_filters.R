@@ -1,8 +1,14 @@
-#' A non-empty sentinel for "(All processes)" -- `selectizeInput`/
-#' `selectInput`'s selectize widget renders an empty-string value's
-#' label as blank instead of showing its text, so this can't just be `""`.
+#' Non-empty sentinels for "(All processes)"/"(All Apps)" -- `selectInput`'s
+#' selectize widget renders an empty-string value's label as blank
+#' instead of showing its text, so these can't just be `""`. Both are
+#' the leading (and default) choice in their picker, for consistency --
+#' a reader switching between the process and app pickers sees the same
+#' "nothing narrowed yet" shape in both, instead of one picker always
+#' landing on a concrete value and the other on a placeholder.
 #' @noRd
 .pv_all_processes_sentinel <- "__all__"
+#' @noRd
+.pv_all_apps_sentinel <- "__all_apps__"
 
 #' Global sidebar filters: business process, app, date range, role, and users
 #'
@@ -18,12 +24,17 @@
 #' [pv_pull_subprocess_log()]'s `start_date`/`end_date`/`users`
 #' passthrough params).
 #'
-#' The process picker includes a leading "(All processes)" choice
-#' (an empty string) -- its default -- for tabs that can meaningfully
-#' show a portfolio-wide view (Users & roles' heatmap); a tab that
-#' can't (Process detail, App detail) just degrades to its own existing
-#' "no data yet" empty state until a real process is picked, the same
-#' way it already degrades for a process with no logged events.
+#' Both pickers default to their own "(All ...)" choice -- "(All
+#' processes)"/"(All Apps)" -- rather than silently landing on an
+#' arbitrary first real process/app, which previously made the two
+#' pickers behave inconsistently (one always concrete, the other not)
+#' and made it unclear whether a given tab's numbers were scoped by the
+#' sidebar or by something else (e.g. the Adoption tab's own IGA-table
+#' row selection, a separate mechanism). A tab that can meaningfully
+#' show a portfolio-wide view in that state (Users & roles' heatmap)
+#' does; a tab that can't (Process detail, App detail) just degrades to
+#' its own existing "nothing picked yet" empty state, the same way it
+#' already degrades for a process/app with no logged events.
 #'
 #' @param id module id.
 #' @export
@@ -85,7 +96,9 @@ pv_filters_process_app_choices <- function(registry, process_id) {
 #'     \item{`process_id`}{a reactive giving the selected `process_id`, or
 #'       a sentinel value (never a real `process_id`) for "(All processes)".}
 #'     \item{`app`}{a reactive giving `list(process_id, subprocess)` for
-#'       the selected app, or `NULL` if nothing is monitored yet.}
+#'       the selected app, or `NULL` for "(All Apps)" (the default) or
+#'       when nothing is monitored yet -- a tab that needs one concrete
+#'       app degrades to its own "nothing picked" empty state either way.}
 #'     \item{`set_process`}{a plain function, `set_process(process_id)` --
 #'       jumps the shared picker to a process (e.g. from
 #'       [mod_overview_server()]'s "Open business process").}
@@ -142,11 +155,12 @@ mod_filters_server <- function(id, registry, refresh = shiny::reactive(NULL)) {
 
     app_choices <- shiny::reactive({
       shiny::req(registry())
-      if (identical(input$process_picker, .pv_all_processes_sentinel) || is.null(input$process_picker)) {
+      real_choices <- if (identical(input$process_picker, .pv_all_processes_sentinel) || is.null(input$process_picker)) {
         pv_filters_all_app_choices(registry())
       } else {
         pv_filters_process_app_choices(registry(), input$process_picker)
       }
+      c("(All Apps)" = .pv_all_apps_sentinel, real_choices)
     })
 
     shiny::observeEvent(input$process_picker, {
@@ -172,6 +186,9 @@ mod_filters_server <- function(id, registry, refresh = shiny::reactive(NULL)) {
 
     app <- shiny::reactive({
       shiny::req(input$app_picker)
+      if (identical(input$app_picker, .pv_all_apps_sentinel)) {
+        return(NULL)
+      }
       parts <- strsplit(input$app_picker, "::", fixed = TRUE)[[1]]
       list(process_id = parts[1], subprocess = parts[2])
     })

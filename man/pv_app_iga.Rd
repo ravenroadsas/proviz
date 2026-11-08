@@ -15,7 +15,11 @@ pv_app_iga(registry, app, adoption)
 }
 \value{
 a list: \code{pct_trained}, \code{satisfaction}, \code{pct_active}, \code{iga}
-(all \code{NA_real_} if unavailable), \code{n_users} (identified user count).
+(all \code{NA_real_} if unavailable), \code{n_users} (identified user count),
+\code{snapshot_as_of} (the workbook's declared \code{as_of} \code{Date} for
+\code{pct_trained}/\code{satisfaction}, \code{NA} if undeclared), \code{active_as_of}
+(the most recent week contributing to \code{pct_active}, \code{NA} if
+unavailable).
 }
 \description{
 IGA is the equally-weighted average of three components, each a

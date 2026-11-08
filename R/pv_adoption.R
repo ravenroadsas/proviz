@@ -1,9 +1,31 @@
+#' Extract one app-wide value from an adoption sheet column -- the first
+#' non-NA value after `convert`ing, warning (not erroring) if more than
+#' one *distinct* converted value is present. Shared by `satisfaction`
+#' and `as_of`, which are both single values that may be repeated down
+#' every row or present just once.
+#' @noRd
+pv_adoption_single_value <- function(df, col, convert, sheet, app, default) {
+  if (!col %in% names(df)) {
+    return(default)
+  }
+  vals <- unique(stats::na.omit(convert(df[[col]])))
+  if (length(vals) > 1) {
+    warning("proviz: adoption sheet '", sheet, "' (app '", app,
+      "') has more than one distinct ", col, " value -- using the first (", vals[1], ")",
+      call. = FALSE
+    )
+  }
+  if (length(vals) > 0) vals[1] else default
+}
+
 #' Load yearly training/satisfaction adoption data from the admin's workbook
 #'
 #' One sheet per app (see [pv_load_registry()]'s `adoption_source` field,
 #' typically passed here as `path`): a row per identified user with their
 #' `user_id` and whether they were `trained` (`TRUE`/`FALSE`), plus a
-#' `satisfaction` column holding one app-wide value -- the same number can
+#' `satisfaction` column holding one app-wide value, and optionally an
+#' `as_of` column (also one app-wide value, so the dashboard can show
+#' *when* this yearly snapshot was taken) -- for both, the same value can
 #' be repeated down every row or present just once; either way the first
 #' non-NA value found is used (more than one *distinct* value is a
 #' warning, not an error, since this is an externally-authored
@@ -18,10 +40,11 @@
 #' @param registry a [pv_load_registry()] result -- used only to know which
 #'   app names to look for among the workbook's sheets.
 #' @return a named list, keyed by `app`: each entry a list with `users`
-#'   (a `data.frame`: `user_id`, `trained`) and `satisfaction` (a single
+#'   (a `data.frame`: `user_id`, `trained`), `satisfaction` (a single
 #'   numeric value, `NA` if the sheet has no usable `satisfaction`
-#'   column). An app with no matching sheet is simply absent (`NULL` via
-#'   `[[`).
+#'   column), and `as_of` (a single `Date`, `NA` if the sheet has no
+#'   usable `as_of` column or it doesn't parse as a date). An app with no
+#'   matching sheet is simply absent (`NULL` via `[[`).
 #' @export
 pv_load_adoption <- function(path, registry) {
   stopifnot(is.character(path), length(path) == 1, file.exists(path))
@@ -72,19 +95,10 @@ pv_load_adoption <- function(path, registry) {
     )
     users <- users[!is.na(users$user_id) & nzchar(users$user_id), ]
 
-    satisfaction <- NA_real_
-    if ("satisfaction" %in% names(df)) {
-      vals <- unique(stats::na.omit(as.numeric(df$satisfaction)))
-      if (length(vals) > 1) {
-        warning("proviz: adoption sheet '", sheet, "' (app '", app,
-          "') has more than one distinct satisfaction value -- using the first (", vals[1], ")",
-          call. = FALSE
-        )
-      }
-      if (length(vals) > 0) satisfaction <- vals[1]
-    }
+    satisfaction <- pv_adoption_single_value(df, "satisfaction", as.numeric, sheet, app, NA_real_)
+    as_of <- pv_adoption_single_value(df, "as_of", as.Date, sheet, app, as.Date(NA))
 
-    adoption[[app]] <- list(users = users, satisfaction = satisfaction)
+    adoption[[app]] <- list(users = users, satisfaction = satisfaction, as_of = as_of)
   }
   adoption
 }
@@ -239,12 +253,19 @@ pv_app_weekly_active_rate <- function(registry, app, adoption) {
 #' @param app an `app` value from `registry$subprocesses`.
 #' @param adoption a [pv_load_adoption()] result.
 #' @return a list: `pct_trained`, `satisfaction`, `pct_active`, `iga`
-#'   (all `NA_real_` if unavailable), `n_users` (identified user count).
+#'   (all `NA_real_` if unavailable), `n_users` (identified user count),
+#'   `snapshot_as_of` (the workbook's declared `as_of` `Date` for
+#'   `pct_trained`/`satisfaction`, `NA` if undeclared), `active_as_of`
+#'   (the most recent week contributing to `pct_active`, `NA` if
+#'   unavailable).
 #' @export
 pv_app_iga <- function(registry, app, adoption) {
   entry <- adoption[[app]]
   if (is.null(entry) || nrow(entry$users) == 0) {
-    return(list(pct_trained = NA_real_, satisfaction = NA_real_, pct_active = NA_real_, iga = NA_real_, n_users = 0L))
+    return(list(
+      pct_trained = NA_real_, satisfaction = NA_real_, pct_active = NA_real_, iga = NA_real_, n_users = 0L,
+      snapshot_as_of = as.Date(NA), active_as_of = as.Date(NA)
+    ))
   }
 
   n_users <- nrow(entry$users)
@@ -255,7 +276,10 @@ pv_app_iga <- function(registry, app, adoption) {
   threshold <- if (length(threshold_vals) > 0) threshold_vals[1] else NA_real_
 
   pct_active <- NA_real_
+  active_as_of <- as.Date(NA)
   if (!is.na(threshold)) {
+    raw_weekly <- pv_app_weekly_scores(registry, app)
+    if (nrow(raw_weekly) > 0) active_as_of <- max(raw_weekly$week)
     weekly <- pv_app_weekly_user_scores(registry, app)
     score_by_user <- stats::setNames(weekly$avg_weekly_score, weekly$user_id)
     user_scores <- unname(score_by_user[entry$users$user_id])
@@ -266,7 +290,10 @@ pv_app_iga <- function(registry, app, adoption) {
   components <- c(pct_trained, satisfaction, pct_active)
   iga <- if (anyNA(components)) NA_real_ else round(mean(components), 1)
 
-  list(pct_trained = pct_trained, satisfaction = satisfaction, pct_active = pct_active, iga = iga, n_users = n_users)
+  list(
+    pct_trained = pct_trained, satisfaction = satisfaction, pct_active = pct_active, iga = iga, n_users = n_users,
+    snapshot_as_of = entry$as_of %||% as.Date(NA), active_as_of = active_as_of
+  )
 }
 
 #' Portfolio-wide weekly active-rate trend
@@ -307,7 +334,8 @@ pv_portfolio_active_rate_trend <- function(registry, adoption, apps = NULL) {
 #' @param registry a [pv_load_registry()] result.
 #' @param adoption a [pv_load_adoption()] result.
 #' @return a `data.frame`, one row per distinct `app`: `app`, `pct_trained`,
-#'   `satisfaction`, `pct_active`, `iga`, `n_users`.
+#'   `satisfaction`, `pct_active`, `iga`, `n_users`, `snapshot_as_of`,
+#'   `active_as_of` (see [pv_app_iga()]).
 #' @export
 pv_portfolio_iga <- function(registry, adoption) {
   apps <- unique(registry$subprocesses$app)
@@ -316,6 +344,7 @@ pv_portfolio_iga <- function(registry, adoption) {
     data.frame(
       app = app, pct_trained = r$pct_trained, satisfaction = r$satisfaction,
       pct_active = r$pct_active, iga = r$iga, n_users = r$n_users,
+      snapshot_as_of = r$snapshot_as_of, active_as_of = r$active_as_of,
       stringsAsFactors = FALSE
     )
   })

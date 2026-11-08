@@ -77,6 +77,7 @@ mod_heatmap_ui <- function(id) {
         style = "padding: 0 0.95rem;",
         "The per-user breakdown below follows the app picked in the sidebar filters."
       ),
+      shiny::uiOutput(ns("no_app_note")),
       shiny::div(
         class = "pv-kpi-row", style = "padding: 0 0.95rem;",
         pv_kpi_box("Score vs. time (app-wide)", shiny::textOutput(ns("kpi_time_r"), inline = TRUE), shiny::icon("arrow-trend-up")),
@@ -112,6 +113,14 @@ mod_heatmap_server <- function(id, registry, refresh = shiny::reactive(NULL),
       shiny::req(registry(), app())
       subs <- registry()$subprocesses
       subs$app[subs$process_id == app()$process_id & subs$subprocess == app()$subprocess][1]
+    })
+
+    output$no_app_note <- shiny::renderUI({
+      if (is.null(app())) {
+        bslib::card(
+          bslib::card_body("Pick an app in the sidebar filters to see its engagement correlations.", class = "text-muted")
+        )
+      }
     })
 
     app_log <- shiny::reactive({

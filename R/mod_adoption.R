@@ -1,14 +1,22 @@
 #' The per-app IGA table's display data.frame: percentages as cell bars,
-#' `--` for any component that couldn't be computed.
+#' `--` for any component that couldn't be computed. `pct_trained` and
+#' `satisfaction` are captioned with `snapshot_as_of` (they're the same
+#' workbook snapshot); `pct_active` is captioned with `active_as_of` (the
+#' most recent week contributing to it). `iga` itself isn't captioned --
+#' it's a blend of up to two different reference dates, so one date
+#' would misrepresent it.
 #' @noRd
 pv_iga_display_table <- function(iga_tab) {
   pct_label <- function(x) ifelse(is.na(x), NA_character_, paste0(x, "%"))
+  date_label <- function(x) ifelse(is.na(x), NA_character_, format(x, "%b %Y"))
+  snapshot_date <- date_label(iga_tab$snapshot_as_of)
+  active_date <- date_label(iga_tab$active_as_of)
   data.frame(
     App = iga_tab$app,
     `Identified users` = iga_tab$n_users,
-    Trained = vapply(seq_len(nrow(iga_tab)), function(i) pv_cell_bar(pct_label(iga_tab$pct_trained[i]), iga_tab$pct_trained[i]), character(1)),
-    Satisfaction = vapply(seq_len(nrow(iga_tab)), function(i) pv_cell_bar(pct_label(iga_tab$satisfaction[i]), iga_tab$satisfaction[i]), character(1)),
-    `Active users` = vapply(seq_len(nrow(iga_tab)), function(i) pv_cell_bar(pct_label(iga_tab$pct_active[i]), iga_tab$pct_active[i]), character(1)),
+    Trained = vapply(seq_len(nrow(iga_tab)), function(i) pv_cell_bar(pct_label(iga_tab$pct_trained[i]), iga_tab$pct_trained[i], snapshot_date[i]), character(1)),
+    Satisfaction = vapply(seq_len(nrow(iga_tab)), function(i) pv_cell_bar(pct_label(iga_tab$satisfaction[i]), iga_tab$satisfaction[i], snapshot_date[i]), character(1)),
+    `Active users` = vapply(seq_len(nrow(iga_tab)), function(i) pv_cell_bar(pct_label(iga_tab$pct_active[i]), iga_tab$pct_active[i], active_date[i]), character(1)),
     IGA = vapply(seq_len(nrow(iga_tab)), function(i) pv_cell_bar(pct_label(iga_tab$iga[i]), iga_tab$iga[i]), character(1)),
     check.names = FALSE, stringsAsFactors = FALSE
   )
