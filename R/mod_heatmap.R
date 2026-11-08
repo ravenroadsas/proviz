@@ -33,8 +33,10 @@ pv_heatmap_columns <- function(long, by_app) {
 
 #' Users tab: a heatmap of activity across the whole process portfolio --
 #' the portfolio-wide, side-by-side view the business/app detail tabs'
-#' own filters can't give. There is no role dimension here: the real
-#' event log (see [pv_pull_subprocess_log()]) carries no role column.
+#' own filters can't give. Filter to a role via the dashboard's global
+#' sidebar (see [mod_filters_server()]) -- the real event log itself (see
+#' [pv_pull_subprocess_log()]) carries no role column, so this tab has no
+#' role breakdown of its own.
 #'
 #' @param id module id.
 #' @export
@@ -76,6 +78,7 @@ mod_heatmap_ui <- function(id) {
         "Score vs. time: is this user's (or this app's) weekly engagement trending up or down? ",
         "Score vs. compliance: do a user's higher-scoring cases also tend to follow the declared step diagram more closely?"
       ),
+      DT::DTOutput(ns("app_summary_table"), fill = FALSE),
       shiny::div(
         style = "padding: 0 0.95rem 0.5rem;",
         shiny::selectInput(ns("corr_app_picker"), "App", choices = NULL, width = "300px")
@@ -100,8 +103,12 @@ mod_heatmap_ui <- function(id) {
 #' @param registry a reactive returning the current [pv_load_registry()] result.
 #' @param refresh a reactive (any value) bumped whenever logs should be
 #'   re-read.
+#' @param date_range,users reactives giving the dashboard's global
+#'   sidebar filters (see [mod_filters_server()]); `users()` already
+#'   resolves any role selection.
 #' @export
-mod_heatmap_server <- function(id, registry, refresh = shiny::reactive(NULL)) {
+mod_heatmap_server <- function(id, registry, refresh = shiny::reactive(NULL),
+                                date_range = shiny::reactive(NULL), users = shiny::reactive(NULL)) {
   shiny::moduleServer(id, function(input, output, session) {
     process_choices <- shiny::reactive({
       shiny::req(registry())
@@ -129,7 +136,8 @@ mod_heatmap_server <- function(id, registry, refresh = shiny::reactive(NULL)) {
     app_log <- shiny::reactive({
       refresh()
       shiny::req(registry(), input$corr_app_picker)
-      pv_app_log(registry(), input$corr_app_picker)
+      rng <- date_range()
+      pv_app_log(registry(), input$corr_app_picker, start_date = rng[1], end_date = rng[2], users = users())
     })
 
     output$kpi_time_r <- shiny::renderText({
@@ -139,8 +147,26 @@ mod_heatmap_server <- function(id, registry, refresh = shiny::reactive(NULL)) {
     })
     output$kpi_compliance_r <- shiny::renderText({
       shiny::req(registry(), input$corr_app_picker)
-      r <- pv_app_score_compliance_correlation(registry(), input$corr_app_picker, by = "app")$r
+      rng <- date_range()
+      r <- pv_app_score_compliance_correlation(registry(), input$corr_app_picker, by = "app", start_date = rng[1], end_date = rng[2], users = users())$r
       if (is.na(r)) "--" else sprintf("%.2f", r)
+    })
+
+    output$app_summary_table <- DT::renderDT({
+      refresh()
+      shiny::req(registry())
+      rng <- date_range()
+      summary <- pv_app_engagement_summary(registry(), start_date = rng[1], end_date = rng[2], users = users())
+      shiny::validate(shiny::need(nrow(summary) > 0, "No app is monitored yet."))
+      display <- data.frame(
+        App = summary$app, Users = summary$n_users,
+        `Score vs. time` = ifelse(is.na(summary$time_r), "--", sprintf("%.2f", summary$time_r)),
+        `Weeks active` = summary$n_weeks,
+        `Score vs. compliance` = ifelse(is.na(summary$compliance_r), "--", sprintf("%.2f", summary$compliance_r)),
+        Cases = summary$n_cases,
+        check.names = FALSE, stringsAsFactors = FALSE
+      )
+      DT::datatable(display, rownames = FALSE, options = list(dom = "t", pageLength = 20), class = "compact stripe")
     })
 
     output$time_corr_table <- DT::renderDT({
@@ -154,7 +180,8 @@ mod_heatmap_server <- function(id, registry, refresh = shiny::reactive(NULL)) {
 
     output$compliance_corr_table <- DT::renderDT({
       shiny::req(registry(), input$corr_app_picker)
-      tab <- pv_app_score_compliance_correlation(registry(), input$corr_app_picker, by = "user")
+      rng <- date_range()
+      tab <- pv_app_score_compliance_correlation(registry(), input$corr_app_picker, by = "user", start_date = rng[1], end_date = rng[2], users = users())
       shiny::validate(shiny::need(nrow(tab) > 0, "No events logged yet for this app."))
       display <- tab
       names(display) <- c("User", "r", "Cases")
@@ -165,11 +192,12 @@ mod_heatmap_server <- function(id, registry, refresh = shiny::reactive(NULL)) {
       refresh()
       shiny::req(registry())
       selected <- if (!is.null(input$process_filter) && length(input$process_filter) > 0) input$process_filter else NULL
+      rng <- date_range()
 
       long <- if (isTRUE(input$show_apps)) {
-        pv_app_heatmap(registry(), process_ids = selected)
+        pv_app_heatmap(registry(), process_ids = selected, start_date = rng[1], end_date = rng[2], users = users())
       } else {
-        full <- pv_portfolio_heatmap(registry())
+        full <- pv_portfolio_heatmap(registry(), start_date = rng[1], end_date = rng[2], users = users())
         if (is.null(selected)) full else full[full$process_id %in% selected, ]
       }
       pv_heatmap_columns(long, by_app = isTRUE(input$show_apps))

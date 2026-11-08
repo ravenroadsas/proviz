@@ -20,6 +20,9 @@
 #'     many clicks can map to one step.
 #'   \item **Steps & outcomes**: declare an app's allowed step
 #'     transitions (its own diagram) and named outcomes.
+#'   \item **Users & roles**: declare (or update) a user's role -- the
+#'     one piece of resource metadata not in the real event log itself,
+#'     needed for the dashboard's role filter.
 #' }
 #'
 #' v1 is deliberately append-only (no delete/rename yet). Every write
@@ -41,7 +44,8 @@ run_registry_editor <- function(registry_path, ...) {
     bslib::nav_panel("Processes & apps", pv_registry_editor_processes_ui("processes")),
     bslib::nav_panel("Process flow", pv_registry_editor_processflow_ui("processflow")),
     bslib::nav_panel("Scan & map steps", pv_registry_editor_scan_ui("scan")),
-    bslib::nav_panel("Steps & outcomes", pv_registry_editor_steps_ui("steps"))
+    bslib::nav_panel("Steps & outcomes", pv_registry_editor_steps_ui("steps")),
+    bslib::nav_panel("Users & roles", pv_registry_editor_roles_ui("roles"))
   )
 
   server <- function(input, output, session) {
@@ -57,6 +61,7 @@ run_registry_editor <- function(registry_path, ...) {
     pv_registry_editor_processflow_server("processflow", registry_path, registry, touch)
     pv_registry_editor_scan_server("scan", registry_path, registry, touch)
     pv_registry_editor_steps_server("steps", registry_path, registry, touch)
+    pv_registry_editor_roles_server("roles", registry_path, registry, touch)
   }
 
   shiny::runApp(shiny::shinyApp(ui, server), ...)
@@ -502,6 +507,54 @@ pv_registry_editor_steps_server <- function(id, registry_path, registry, touch) 
           outcome_tracking_join_key = if (nzchar(input$tracking_key)) input$tracking_key else NA_character_
         )
         shiny::showNotification(paste0("Added outcome '", input$outcome_id, "'"), type = "message")
+        touch()
+      })
+    })
+  })
+}
+
+## -------------------------------------------------------------------------
+## Tab 5: Users & roles
+## -------------------------------------------------------------------------
+
+#' @noRd
+pv_registry_editor_roles_ui <- function(id) {
+  ns <- shiny::NS(id)
+  shiny::fluidRow(
+    shiny::column(
+      4,
+      bslib::card(
+        bslib::card_header("Set a user's role"),
+        shiny::helpText(
+          "Not tied to any process/app -- a role can be declared for a user who hasn't ",
+          "logged any activity yet. Setting an existing user_id's role again updates it."
+        ),
+        shiny::textInput(ns("user_id"), "user_id"),
+        shiny::textInput(ns("role"), "role"),
+        shiny::actionButton(ns("set_role"), "Set role", class = "btn-primary")
+      )
+    ),
+    shiny::column(
+      8,
+      bslib::card(bslib::card_header("Declared roles"), DT::DTOutput(ns("roles_table")))
+    )
+  )
+}
+
+#' @noRd
+pv_registry_editor_roles_server <- function(id, registry_path, registry, touch) {
+  shiny::moduleServer(id, function(input, output, session) {
+    output$roles_table <- DT::renderDT({
+      roles <- registry()$user_roles
+      shiny::validate(shiny::need(nrow(roles) > 0, "No roles declared yet."))
+      DT::datatable(roles, rownames = FALSE, options = list(pageLength = 15, dom = "tp"), class = "compact stripe")
+    })
+
+    shiny::observeEvent(input$set_role, {
+      pv_registry_editor_notify_error({
+        shiny::req(input$user_id, input$role)
+        pv_registry_db_upsert_user_role(registry_path, input$user_id, input$role)
+        shiny::showNotification(paste0("Set role for '", input$user_id, "'"), type = "message")
         touch()
       })
     })

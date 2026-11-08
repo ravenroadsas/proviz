@@ -4,12 +4,25 @@
 \alias{pv_pull_subprocess_log}
 \title{Pull one subprocess's raw event log}
 \usage{
-pv_pull_subprocess_log(registry, process_id, subprocess)
+pv_pull_subprocess_log(
+  registry,
+  process_id,
+  subprocess,
+  start_date = NULL,
+  end_date = NULL,
+  users = NULL
+)
 }
 \arguments{
 \item{registry}{a \code{\link[=pv_load_registry]{pv_load_registry()}} result.}
 
 \item{process_id, subprocess}{identify the app via its registry row.}
+
+\item{start_date, end_date, users}{optional global-filter passthrough
+(see \code{\link[=pv_filter_log]{pv_filter_log()}}) -- applied to the log before it's returned,
+so every caller downstream (KPIs, conformance, heatmaps, ...) sees
+already-filtered data without each having to filter it itself.
+\code{NULL} (default) for no filtering, the original unfiltered read.}
 }
 \value{
 a \code{data.frame}: \code{session_id}, \code{user_id}, \code{step_id},

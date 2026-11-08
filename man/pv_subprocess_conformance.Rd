@@ -4,7 +4,15 @@
 \alias{pv_subprocess_conformance}
 \title{Graph-walk conformance for one subprocess's whole log}
 \usage{
-pv_subprocess_conformance(registry, process_id, subprocess, log = NULL)
+pv_subprocess_conformance(
+  registry,
+  process_id,
+  subprocess,
+  log = NULL,
+  start_date = NULL,
+  end_date = NULL,
+  users = NULL
+)
 }
 \arguments{
 \item{registry}{a \code{\link[=pv_load_registry]{pv_load_registry()}} result.}
@@ -13,6 +21,9 @@ pv_subprocess_conformance(registry, process_id, subprocess, log = NULL)
 
 \item{log}{optionally, an already-pulled/filtered log (see
 \code{\link[=pv_filter_log]{pv_filter_log()}}) to reuse instead of pulling fresh.}
+
+\item{start_date, end_date, users}{optional global-filter passthrough
+(see \code{\link[=pv_pull_subprocess_log]{pv_pull_subprocess_log()}}), used only when \code{log} isn't given.}
 }
 \value{
 a \code{data.frame}, \code{\link[=pv_diagram_conformance]{pv_diagram_conformance()}}'s shape (\code{case_id}

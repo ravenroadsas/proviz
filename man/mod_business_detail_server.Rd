@@ -8,7 +8,9 @@ mod_business_detail_server(
   id,
   registry,
   selected_process,
-  refresh = shiny::reactive(NULL)
+  refresh = shiny::reactive(NULL),
+  date_range = shiny::reactive(NULL),
+  users = shiny::reactive(NULL)
 )
 }
 \arguments{
@@ -21,6 +23,9 @@ from \code{\link[=mod_overview_server]{mod_overview_server()}}'s "Open business 
 
 \item{refresh}{a reactive (any value) bumped whenever logs should be
 re-read.}
+
+\item{date_range, users}{reactives giving the dashboard's global
+sidebar filters (see \code{\link[=mod_filters_server]{mod_filters_server()}}).}
 }
 \value{
 a list: \code{selected_app}, a reactive giving \code{list(process_id, subprocess)}

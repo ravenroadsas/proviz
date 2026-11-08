@@ -4,12 +4,21 @@
 \alias{pv_process_completion_rate}
 \title{Business process completion rate}
 \usage{
-pv_process_completion_rate(registry, process_id)
+pv_process_completion_rate(
+  registry,
+  process_id,
+  start_date = NULL,
+  end_date = NULL,
+  users = NULL
+)
 }
 \arguments{
 \item{registry}{a \code{\link[=pv_load_registry]{pv_load_registry()}} result.}
 
 \item{process_id}{a \code{process_id} from \code{registry$processes}.}
+
+\item{start_date, end_date, users}{optional global-filter passthrough,
+see \code{\link[=pv_pull_subprocess_log]{pv_pull_subprocess_log()}}.}
 }
 \value{
 a list: \code{n_cases} (total distinct sessions seen at the final

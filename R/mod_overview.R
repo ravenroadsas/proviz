@@ -70,22 +70,28 @@ mod_overview_ui <- function(id) {
 #' @param registry a reactive returning the current [pv_load_registry()] result.
 #' @param refresh a reactive (any value) bumped whenever logs should be
 #'   re-read -- e.g. the "Refresh data" button's timestamp.
+#' @param date_range,users reactives giving the dashboard's global
+#'   sidebar filters (see [mod_filters_server()]) -- `date_range()` a
+#'   `c(start, end)` or `NULL`, `users()` a character vector or `NULL`.
 #' @return a list: `selected_process`, a reactive giving the `process_id`
 #'   the user asked to open ("Open business process" clicked). `NULL`
 #'   until clicked.
 #' @export
-mod_overview_server <- function(id, registry, refresh = shiny::reactive(NULL)) {
+mod_overview_server <- function(id, registry, refresh = shiny::reactive(NULL),
+                                 date_range = shiny::reactive(NULL), users = shiny::reactive(NULL)) {
   shiny::moduleServer(id, function(input, output, session) {
     kpi_grid <- shiny::reactive({
       refresh()
       shiny::req(registry())
-      pv_registry_kpis(registry())
+      rng <- date_range()
+      pv_registry_kpis(registry(), start_date = rng[1], end_date = rng[2], users = users())
     })
 
     portfolio <- shiny::reactive({
       refresh()
       shiny::req(registry())
-      pv_portfolio_kpis(registry())
+      rng <- date_range()
+      pv_portfolio_kpis(registry(), start_date = rng[1], end_date = rng[2], users = users())
     })
 
     output$kpi_processes <- shiny::renderText(as.character(portfolio()$n_processes))

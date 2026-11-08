@@ -5,12 +5,15 @@
 \title{This app's log, unioned across every (process, subprocess) slot it
 occupies (an app can in principle occupy more than one slot).}
 \usage{
-pv_app_log(registry, app)
+pv_app_log(registry, app, start_date = NULL, end_date = NULL, users = NULL)
 }
 \arguments{
 \item{registry}{a \code{\link[=pv_load_registry]{pv_load_registry()}} result.}
 
 \item{app}{an \code{app} value from \code{registry$subprocesses}.}
+
+\item{start_date, end_date, users}{optional global-filter passthrough,
+see \code{\link[=pv_pull_subprocess_log]{pv_pull_subprocess_log()}}.}
 }
 \value{
 a \code{\link[=pv_pull_subprocess_log]{pv_pull_subprocess_log()}}-shaped \code{data.frame} plus

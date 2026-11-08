@@ -12,6 +12,11 @@
 #'
 #' @param registry a [pv_load_registry()] result.
 #' @param process_id,subprocess identify the app via its registry row.
+#' @param start_date,end_date,users optional global-filter passthrough
+#'   (see [pv_filter_log()]) -- applied to the log before it's returned,
+#'   so every caller downstream (KPIs, conformance, heatmaps, ...) sees
+#'   already-filtered data without each having to filter it itself.
+#'   `NULL` (default) for no filtering, the original unfiltered read.
 #' @return a `data.frame`: `session_id`, `user_id`, `step_id`,
 #'   `started_at` (`POSIXct`), `nclicks`, `total_weight`, `app`. Zero rows
 #'   if `process_id`/`subprocess` don't match a registry row (e.g. a
@@ -21,7 +26,7 @@
 #'   isn't live -- consistent with how the dashboard treats an
 #'   unreachable store elsewhere: skip it, don't fail the whole page).
 #' @export
-pv_pull_subprocess_log <- function(registry, process_id, subprocess) {
+pv_pull_subprocess_log <- function(registry, process_id, subprocess, start_date = NULL, end_date = NULL, users = NULL) {
   stopifnot(inherits(registry, "pv_registry"))
   row <- registry$subprocesses[
     registry$subprocesses$process_id == process_id & registry$subprocesses$subprocess == subprocess,
@@ -43,12 +48,13 @@ pv_pull_subprocess_log <- function(registry, process_id, subprocess) {
     return(pv_empty_log())
   }
 
-  data.frame(
+  out <- data.frame(
     session_id = as.character(raw$session_id), user_id = as.character(raw$username),
     step_id = as.character(raw$process), started_at = lubridate::ymd_hms(as.character(raw$starttime), tz = "UTC", quiet = TRUE),
     nclicks = as.integer(raw$nclicks), total_weight = as.numeric(raw$total_weight),
     app = as.character(raw$app_id), stringsAsFactors = FALSE
   )
+  pv_filter_log(out, start_date = start_date, end_date = end_date, users = users)
 }
 
 #' @noRd
@@ -73,14 +79,16 @@ pv_empty_log <- function() {
 #'
 #' @param registry a [pv_load_registry()] result.
 #' @param process_id a `process_id` from `registry$processes`.
+#' @param start_date,end_date,users optional global-filter passthrough,
+#'   see [pv_pull_subprocess_log()].
 #' @return a `data.frame`, [pv_pull_subprocess_log()]'s shape plus
 #'   `subprocess`. Zero rows if no subprocess under this process has a
 #'   reachable log yet.
 #' @export
-pv_pull_process_log <- function(registry, process_id) {
+pv_pull_process_log <- function(registry, process_id, start_date = NULL, end_date = NULL, users = NULL) {
   subs <- registry$subprocesses[registry$subprocesses$process_id == process_id, ]
   rows <- lapply(seq_len(nrow(subs)), function(i) {
-    log <- pv_pull_subprocess_log(registry, process_id, subs$subprocess[i])
+    log <- pv_pull_subprocess_log(registry, process_id, subs$subprocess[i], start_date = start_date, end_date = end_date, users = users)
     if (nrow(log) == 0) {
       return(NULL)
     }
@@ -92,6 +100,28 @@ pv_pull_process_log <- function(registry, process_id) {
     out <- cbind(pv_empty_log(), subprocess = character(0))
   }
   out
+}
+
+#' Pull every instrumented process's log, unioned across the whole
+#' portfolio
+#'
+#' The one call behind the dashboard's global sidebar filters -- used to
+#' derive the full, unfiltered date range and user list every tab's
+#' filter inputs offer, and reusable anywhere else a portfolio-wide union
+#' is needed (see [pv_portfolio_kpis()]).
+#'
+#' @param registry a [pv_load_registry()] result.
+#' @param start_date,end_date,users optional global-filter passthrough,
+#'   see [pv_pull_subprocess_log()].
+#' @return a `data.frame`, [pv_pull_process_log()]'s shape. Zero rows if
+#'   no instrumented process has any log data yet.
+#' @export
+pv_pull_portfolio_log <- function(registry, start_date = NULL, end_date = NULL, users = NULL) {
+  instrumented_ids <- registry$processes$process_id[registry$processes$status == "instrumented"]
+  do.call(rbind, c(
+    lapply(instrumented_ids, function(pid) pv_pull_process_log(registry, pid, start_date = start_date, end_date = end_date, users = users)),
+    list(cbind(pv_empty_log(), subprocess = character(0)))
+  ))
 }
 
 #' Reconstruct each session's ordered step sequence
@@ -127,11 +157,13 @@ pv_session_step_sequences <- function(log) {
 #' @param process_id,subprocess identify the app.
 #' @param log optionally, an already-pulled/filtered log (see
 #'   [pv_filter_log()]) to reuse instead of pulling fresh.
+#' @param start_date,end_date,users optional global-filter passthrough
+#'   (see [pv_pull_subprocess_log()]), used only when `log` isn't given.
 #' @return a `data.frame`, [pv_diagram_conformance()]'s shape (`case_id`
 #'   here is each session's id). Zero rows if this subprocess has no
 #'   log, or no declared step diagram.
 #' @export
-pv_subprocess_conformance <- function(registry, process_id, subprocess, log = NULL) {
+pv_subprocess_conformance <- function(registry, process_id, subprocess, log = NULL, start_date = NULL, end_date = NULL, users = NULL) {
   empty <- data.frame(
     case_id = character(0), score = numeric(0), n_deviations = integer(0),
     n_transitions = integer(0), n_nodes = integer(0)
@@ -140,7 +172,7 @@ pv_subprocess_conformance <- function(registry, process_id, subprocess, log = NU
   if (is.null(diagram)) {
     return(empty)
   }
-  if (is.null(log)) log <- pv_pull_subprocess_log(registry, process_id, subprocess)
+  if (is.null(log)) log <- pv_pull_subprocess_log(registry, process_id, subprocess, start_date = start_date, end_date = end_date, users = users)
   if (nrow(log) == 0) {
     return(empty)
   }

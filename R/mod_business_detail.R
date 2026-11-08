@@ -28,11 +28,7 @@ mod_business_detail_ui <- function(id) {
       fill = FALSE,
       bslib::card_body(
         style = "padding-bottom: 4px;",
-        shiny::fluidRow(
-          shiny::column(4, shiny::selectInput(ns("process_picker"), "Business process", choices = NULL, width = "100%")),
-          shiny::column(4, shiny::dateRangeInput(ns("date_range"), "Case start date range", width = "100%")),
-          shiny::column(4, shiny::selectizeInput(ns("user_filter"), "Users", choices = NULL, multiple = TRUE, width = "100%"))
-        )
+        shiny::selectInput(ns("process_picker"), "Business process", choices = NULL, width = "100%")
       )
     ),
     shiny::uiOutput(ns("no_data_note")),
@@ -86,11 +82,14 @@ mod_business_detail_ui <- function(id) {
 #'   from [mod_overview_server()]'s "Open business process"), or `NULL`.
 #' @param refresh a reactive (any value) bumped whenever logs should be
 #'   re-read.
+#' @param date_range,users reactives giving the dashboard's global
+#'   sidebar filters (see [mod_filters_server()]).
 #' @return a list: `selected_app`, a reactive giving `list(process_id, subprocess)`
 #'   for the app detail tab to jump to (`NULL` until a row's "Open app detail"
 #'   is clicked).
 #' @export
-mod_business_detail_server <- function(id, registry, selected_process, refresh = shiny::reactive(NULL)) {
+mod_business_detail_server <- function(id, registry, selected_process, refresh = shiny::reactive(NULL),
+                                        date_range = shiny::reactive(NULL), users = shiny::reactive(NULL)) {
   shiny::moduleServer(id, function(input, output, session) {
     process_choices <- shiny::reactive({
       shiny::req(registry())
@@ -118,29 +117,12 @@ mod_business_detail_server <- function(id, registry, selected_process, refresh =
     raw_process_log <- shiny::reactive({
       refresh()
       shiny::req(input$process_picker, registry())
-      pv_pull_process_log(registry(), input$process_picker)
-    })
-
-    shiny::observeEvent(raw_process_log(), {
-      log <- raw_process_log()
-      if (nrow(log) == 0) {
-        return()
-      }
-      rng <- range(as.Date(log$started_at))
-      shiny::updateDateRangeInput(session, "date_range", start = rng[1], end = rng[2], min = rng[1], max = rng[2])
-      shiny::updateSelectizeInput(session, "user_filter",
-        choices = sort(unique(stats::na.omit(log$user_id))), selected = character(0)
-      )
-    })
-
-    filtered_process_log <- shiny::reactive({
-      log <- raw_process_log()
-      shiny::req(input$date_range)
-      pv_filter_log(log, start_date = input$date_range[1], end_date = input$date_range[2], users = input$user_filter)
+      rng <- date_range()
+      pv_pull_process_log(registry(), input$process_picker, start_date = rng[1], end_date = rng[2], users = users())
     })
 
     kpis <- shiny::reactive({
-      log <- filtered_process_log()
+      log <- raw_process_log()
       subs <- process_subs()
       conf_medians <- vapply(subs$subprocess, function(sp) {
         conf <- pv_subprocess_conformance(registry(), input$process_picker, sp, log = log[log$subprocess == sp, ])
@@ -156,7 +138,8 @@ mod_business_detail_server <- function(id, registry, selected_process, refresh =
 
     completion <- shiny::reactive({
       shiny::req(input$process_picker, registry())
-      pv_process_outcome_distribution(registry(), input$process_picker)
+      rng <- date_range()
+      pv_process_outcome_distribution(registry(), input$process_picker, start_date = rng[1], end_date = rng[2], users = users())
     })
 
     output$no_data_note <- shiny::renderUI({
@@ -209,8 +192,8 @@ mod_business_detail_server <- function(id, registry, selected_process, refresh =
         monitored <- !is.na(subs$log_path[i])
         app_kpis <- list(n_cases = NA_integer_, n_users = NA_integer_, median_duration_mins = NA_real_, conformance_median = NA_real_)
         if (monitored) {
-          log <- pv_pull_subprocess_log(registry(), pid, subs$subprocess[i])
-          log <- pv_filter_log(log, start_date = input$date_range[1], end_date = input$date_range[2], users = input$user_filter)
+          rng <- date_range()
+          log <- pv_pull_subprocess_log(registry(), pid, subs$subprocess[i], start_date = rng[1], end_date = rng[2], users = users())
           diagram <- registry()$subprocess_diagrams[[paste(pid, subs$subprocess[i], sep = "::")]]
           app_kpis <- pv_process_kpis(log, diagram)
         }

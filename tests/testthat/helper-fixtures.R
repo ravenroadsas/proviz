@@ -40,6 +40,7 @@ local_fixture_registry <- function(env = parent.frame()) {
         )
       ),
       clicks = list(),
+      user_roles = data.frame(user_id = "alice", role = "Analyst", stringsAsFactors = FALSE),
       adoption_source = NULL
     ),
     class = "pv_registry"

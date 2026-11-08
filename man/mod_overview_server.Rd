@@ -4,7 +4,13 @@
 \alias{mod_overview_server}
 \title{Server logic for the portfolio overview tab}
 \usage{
-mod_overview_server(id, registry, refresh = shiny::reactive(NULL))
+mod_overview_server(
+  id,
+  registry,
+  refresh = shiny::reactive(NULL),
+  date_range = shiny::reactive(NULL),
+  users = shiny::reactive(NULL)
+)
 }
 \arguments{
 \item{id}{module id.}
@@ -13,6 +19,10 @@ mod_overview_server(id, registry, refresh = shiny::reactive(NULL))
 
 \item{refresh}{a reactive (any value) bumped whenever logs should be
 re-read -- e.g. the "Refresh data" button's timestamp.}
+
+\item{date_range, users}{reactives giving the dashboard's global
+sidebar filters (see \code{\link[=mod_filters_server]{mod_filters_server()}}) -- \code{date_range()} a
+\code{c(start, end)} or \code{NULL}, \code{users()} a character vector or \code{NULL}.}
 }
 \value{
 a list: \code{selected_process}, a reactive giving the \code{process_id}

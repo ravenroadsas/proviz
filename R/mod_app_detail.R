@@ -35,10 +35,6 @@ mod_app_detail_ui <- function(id) {
         shiny::fluidRow(
           shiny::column(6, shiny::selectInput(ns("process_picker"), "Business process", choices = NULL, width = "100%")),
           shiny::column(6, shiny::selectInput(ns("app_picker"), "App", choices = NULL, width = "100%"))
-        ),
-        shiny::fluidRow(
-          shiny::column(6, shiny::dateRangeInput(ns("date_range"), "Case start date range", width = "100%")),
-          shiny::column(6, shiny::selectizeInput(ns("user_filter"), "Users", choices = NULL, multiple = TRUE, width = "100%"))
         )
       )
     ),
@@ -110,8 +106,11 @@ mod_app_detail_ui <- function(id) {
 #'   detail"), or `NULL`.
 #' @param refresh a reactive (any value) bumped whenever logs should be
 #'   re-read.
+#' @param date_range,users reactives giving the dashboard's global
+#'   sidebar filters (see [mod_filters_server()]).
 #' @export
-mod_app_detail_server <- function(id, registry, selected_app, refresh = shiny::reactive(NULL)) {
+mod_app_detail_server <- function(id, registry, selected_app, refresh = shiny::reactive(NULL),
+                                   date_range = shiny::reactive(NULL), users = shiny::reactive(NULL)) {
   shiny::moduleServer(id, function(input, output, session) {
     pending_jump <- shiny::reactiveVal(NULL)
 
@@ -156,7 +155,8 @@ mod_app_detail_server <- function(id, registry, selected_app, refresh = shiny::r
     raw_log <- shiny::reactive({
       refresh()
       shiny::req(input$process_picker, input$app_picker, registry())
-      pv_pull_subprocess_log(registry(), input$process_picker, input$app_picker)
+      rng <- date_range()
+      pv_pull_subprocess_log(registry(), input$process_picker, input$app_picker, start_date = rng[1], end_date = rng[2], users = users())
     })
 
     diagram <- shiny::reactive({
@@ -164,23 +164,7 @@ mod_app_detail_server <- function(id, registry, selected_app, refresh = shiny::r
       registry()$subprocess_diagrams[[paste(input$process_picker, input$app_picker, sep = "::")]]
     })
 
-    shiny::observeEvent(raw_log(), {
-      log <- raw_log()
-      if (nrow(log) == 0) {
-        return()
-      }
-      rng <- range(as.Date(log$started_at))
-      shiny::updateDateRangeInput(session, "date_range", start = rng[1], end = rng[2], min = rng[1], max = rng[2])
-      shiny::updateSelectizeInput(session, "user_filter",
-        choices = sort(unique(stats::na.omit(log$user_id))), selected = character(0)
-      )
-    })
-
-    filtered_log <- shiny::reactive({
-      log <- raw_log()
-      shiny::req(input$date_range)
-      pv_filter_log(log, start_date = input$date_range[1], end_date = input$date_range[2], users = input$user_filter)
-    })
+    filtered_log <- shiny::reactive(raw_log())
 
     kpis <- shiny::reactive(pv_process_kpis(filtered_log(), diagram()))
 

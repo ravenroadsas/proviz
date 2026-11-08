@@ -4,10 +4,18 @@
 \alias{pv_portfolio_heatmap}
 \title{User activity heatmap across the whole process portfolio}
 \usage{
-pv_portfolio_heatmap(registry)
+pv_portfolio_heatmap(
+  registry,
+  start_date = NULL,
+  end_date = NULL,
+  users = NULL
+)
 }
 \arguments{
 \item{registry}{a \code{\link[=pv_load_registry]{pv_load_registry()}} result.}
+
+\item{start_date, end_date, users}{optional global-filter passthrough,
+see \code{\link[=pv_pull_subprocess_log]{pv_pull_subprocess_log()}}.}
 }
 \value{
 a \code{data.frame}, long-form: \code{process_id}, \code{process} (label),

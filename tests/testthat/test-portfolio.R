@@ -104,7 +104,7 @@ test_that("pv_process_completion_rate reshapes the outcome distribution into a c
 test_that("pv_portfolio_completion sums cases/completions across instrumented processes before dividing", {
   reg <- fixture_portfolio_registry()
   testthat::local_mocked_bindings(
-    pv_process_completion_rate = function(registry, process_id) list(n_cases = 10, n_completed = 5, pct = 50),
+    pv_process_completion_rate = function(...) list(n_cases = 10, n_completed = 5, pct = 50),
     .package = "proviz"
   )
   completion <- pv_portfolio_completion(reg)
@@ -119,7 +119,7 @@ test_that("pv_portfolio_kpis unions logs across instrumented processes without d
     started_at = as.POSIXct(c("2026-01-01 09:00", "2026-01-01 09:05"))
   )
   testthat::local_mocked_bindings(
-    pv_pull_process_log = function(registry, pid) fake_log,
+    pv_pull_process_log = function(...) fake_log,
     pv_portfolio_completion = function(...) list(n_cases = 2, n_completed = 1, pct = 50),
     .package = "proviz"
   )

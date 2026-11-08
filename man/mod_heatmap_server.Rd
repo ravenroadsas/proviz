@@ -4,7 +4,13 @@
 \alias{mod_heatmap_server}
 \title{Server logic for the users heatmap tab}
 \usage{
-mod_heatmap_server(id, registry, refresh = shiny::reactive(NULL))
+mod_heatmap_server(
+  id,
+  registry,
+  refresh = shiny::reactive(NULL),
+  date_range = shiny::reactive(NULL),
+  users = shiny::reactive(NULL)
+)
 }
 \arguments{
 \item{id}{module id.}
@@ -13,6 +19,10 @@ mod_heatmap_server(id, registry, refresh = shiny::reactive(NULL))
 
 \item{refresh}{a reactive (any value) bumped whenever logs should be
 re-read.}
+
+\item{date_range, users}{reactives giving the dashboard's global
+sidebar filters (see \code{\link[=mod_filters_server]{mod_filters_server()}}); \code{users()} already
+resolves any role selection.}
 }
 \description{
 Server logic for the users heatmap tab

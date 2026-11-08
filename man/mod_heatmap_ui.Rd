@@ -4,8 +4,10 @@
 \alias{mod_heatmap_ui}
 \title{Users tab: a heatmap of activity across the whole process portfolio --
 the portfolio-wide, side-by-side view the business/app detail tabs'
-own filters can't give. There is no role dimension here: the real
-event log (see \code{\link[=pv_pull_subprocess_log]{pv_pull_subprocess_log()}}) carries no role column.}
+own filters can't give. Filter to a role via the dashboard's global
+sidebar (see \code{\link[=mod_filters_server]{mod_filters_server()}}) -- the real event log itself (see
+\code{\link[=pv_pull_subprocess_log]{pv_pull_subprocess_log()}}) carries no role column, so this tab has no
+role breakdown of its own.}
 \usage{
 mod_heatmap_ui(id)
 }
@@ -15,6 +17,8 @@ mod_heatmap_ui(id)
 \description{
 Users tab: a heatmap of activity across the whole process portfolio --
 the portfolio-wide, side-by-side view the business/app detail tabs'
-own filters can't give. There is no role dimension here: the real
-event log (see \code{\link[=pv_pull_subprocess_log]{pv_pull_subprocess_log()}}) carries no role column.
+own filters can't give. Filter to a role via the dashboard's global
+sidebar (see \code{\link[=mod_filters_server]{mod_filters_server()}}) -- the real event log itself (see
+\code{\link[=pv_pull_subprocess_log]{pv_pull_subprocess_log()}}) carries no role column, so this tab has no
+role breakdown of its own.
 }

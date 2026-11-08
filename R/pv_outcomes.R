@@ -192,11 +192,13 @@ pv_final_subprocesses <- function(registry, process_id) {
 #'
 #' @param registry a [pv_load_registry()] result.
 #' @param process_id a `process_id` from `registry$processes`.
+#' @param start_date,end_date,users optional global-filter passthrough,
+#'   see [pv_pull_subprocess_log()].
 #' @return a `data.frame`, same shape as [pv_outcome_distribution()]'s.
 #'   Zero rows if the process has no final subprocess with both a log and
 #'   a declared outcome.
 #' @export
-pv_process_outcome_distribution <- function(registry, process_id) {
+pv_process_outcome_distribution <- function(registry, process_id, start_date = NULL, end_date = NULL, users = NULL) {
   empty <- data.frame(
     outcome_id = character(0), label = character(0), kind = character(0),
     tier = character(0), n_cases = integer(0), pct = numeric(0)
@@ -212,7 +214,7 @@ pv_process_outcome_distribution <- function(registry, process_id) {
     key <- paste(process_id, finals$subprocess[i], sep = "::")
     diagram <- registry$subprocess_diagrams[[key]]
     if (is.null(diagram) || nrow(diagram$outcomes) == 0) next
-    log <- pv_pull_subprocess_log(registry, process_id, finals$subprocess[i])
+    log <- pv_pull_subprocess_log(registry, process_id, finals$subprocess[i], start_date = start_date, end_date = end_date, users = users)
     seqs <- pv_session_step_sequences(log)
     if (length(seqs) == 0) next
     names(seqs) <- paste(finals$subprocess[i], names(seqs), sep = "::")
@@ -236,12 +238,14 @@ pv_process_outcome_distribution <- function(registry, process_id) {
 #'
 #' @param registry a [pv_load_registry()] result.
 #' @param process_id a `process_id` from `registry$processes`.
+#' @param start_date,end_date,users optional global-filter passthrough,
+#'   see [pv_pull_subprocess_log()].
 #' @return a list: `n_cases` (total distinct sessions seen at the final
 #'   subprocess(es)), `n_completed` (reached at least one outcome), `pct`
 #'   (`NA` if `n_cases` is 0).
 #' @export
-pv_process_completion_rate <- function(registry, process_id) {
-  dist <- pv_process_outcome_distribution(registry, process_id)
+pv_process_completion_rate <- function(registry, process_id, start_date = NULL, end_date = NULL, users = NULL) {
+  dist <- pv_process_outcome_distribution(registry, process_id, start_date = start_date, end_date = end_date, users = users)
   if (nrow(dist) == 0) {
     return(list(n_cases = 0L, n_completed = 0L, pct = NA_real_))
   }
@@ -262,12 +266,16 @@ pv_process_completion_rate <- function(registry, process_id) {
 #' drowned out by one with few.
 #'
 #' @param registry a [pv_load_registry()] result.
+#' @param start_date,end_date,users optional global-filter passthrough,
+#'   see [pv_pull_subprocess_log()].
 #' @return a list: `n_cases`, `n_completed`, `pct` (`NA` if no
 #'   instrumented process has any cases yet).
 #' @export
-pv_portfolio_completion <- function(registry) {
+pv_portfolio_completion <- function(registry, start_date = NULL, end_date = NULL, users = NULL) {
   instrumented_ids <- registry$processes$process_id[registry$processes$status == "instrumented"]
-  rates <- lapply(instrumented_ids, pv_process_completion_rate, registry = registry)
+  rates <- lapply(instrumented_ids, pv_process_completion_rate,
+    registry = registry, start_date = start_date, end_date = end_date, users = users
+  )
 
   n_cases <- sum(vapply(rates, `[[`, numeric(1), "n_cases"))
   n_completed <- sum(vapply(rates, `[[`, numeric(1), "n_completed"))

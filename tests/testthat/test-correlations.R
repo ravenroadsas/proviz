@@ -68,7 +68,7 @@ test_that("pv_app_log unions every monitored (process, subprocess) slot for an a
   log1 <- data.frame(session_id = "c1", step_id = "a", started_at = as.POSIXct("2026-01-01"), user_id = "u1", total_weight = 1, stringsAsFactors = FALSE)
   log2 <- data.frame(session_id = "c2", step_id = "b", started_at = as.POSIXct("2026-01-02"), user_id = "u2", total_weight = 1, stringsAsFactors = FALSE)
   testthat::local_mocked_bindings(
-    pv_pull_subprocess_log = function(registry, pid, sp) if (sp == "sub1") log1 else log2,
+    pv_pull_subprocess_log = function(registry, pid, sp, ...) if (sp == "sub1") log1 else log2,
     .package = "proviz"
   )
 
@@ -95,4 +95,19 @@ test_that("pv_iga_compliance_correlation pairs each app's IGA with its mean conf
   expect_equal(res$data$app, "app1")
   expect_equal(res$data$mean_conformance, 1)
   expect_true(is.na(res$r)) # only one app -- not enough points
+})
+
+test_that("pv_app_engagement_summary returns one row per monitored app", {
+  reg <- local_fixture_registry()
+  summary <- pv_app_engagement_summary(reg)
+  expect_equal(summary$app, "typecurves")
+  expect_equal(summary$n_users, 1)
+  expect_equal(summary$n_cases, 1) # one session in the fixture log -- too few to estimate an r
+  expect_true(is.na(summary$compliance_r))
+})
+
+test_that("pv_app_engagement_summary returns the empty schema when no app is monitored", {
+  reg <- local_fixture_registry()
+  reg$subprocesses$log_path <- NA_character_
+  expect_equal(nrow(pv_app_engagement_summary(reg)), 0)
 })

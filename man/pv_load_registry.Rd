@@ -40,6 +40,8 @@ shape as \verb{$process_diagrams}' but \code{step_id} instead of
 of \code{data.frame}s: \code{id}, \code{step_id}, \code{label}, \code{selector}, \code{kind},
 \code{feature}, \code{event}, \code{weight}. Absent for a subprocess with no
 declared clicks yet.}
+\item{\verb{$user_roles}}{a \code{data.frame}: \code{user_id}, \code{role}. Zero rows
+if none declared.}
 \item{\verb{$adoption_source}}{path to the yearly training/satisfaction
 Excel workbook (see \code{\link[=pv_load_adoption]{pv_load_adoption()}}) -- \code{NULL} if the
 registry's \code{settings} table has no \code{adoption_source} row.}
@@ -65,6 +67,9 @@ click -> step bindings (selector/kind/feature/event/weight), many
 clicks to one step. Not consulted when reading a real log (see
 \code{\link[=pv_pull_subprocess_log]{pv_pull_subprocess_log()}}) -- only relevant for a future
 telemetry-config export.
+\item \strong{User roles} -- \verb{$user_roles}: a flat \code{user_id} -> \code{role}
+lookup. The real event log carries no role column, so this is
+the only source for a role filter/breakdown.
 }
 The fourth artifact, the actual log records, is never part of the
 registry -- it's read straight from each subprocess's \code{log_path}.

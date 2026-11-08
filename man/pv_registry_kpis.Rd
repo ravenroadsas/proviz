@@ -4,10 +4,13 @@
 \alias{pv_registry_kpis}
 \title{KPI grid for every instrumented business process in the registry}
 \usage{
-pv_registry_kpis(registry)
+pv_registry_kpis(registry, start_date = NULL, end_date = NULL, users = NULL)
 }
 \arguments{
 \item{registry}{a \code{\link[=pv_load_registry]{pv_load_registry()}} result.}
+
+\item{start_date, end_date, users}{optional global-filter passthrough,
+see \code{\link[=pv_pull_subprocess_log]{pv_pull_subprocess_log()}}.}
 }
 \value{
 \code{registry$processes} with added columns: \code{n_apps},

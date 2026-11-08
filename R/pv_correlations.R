@@ -133,14 +133,16 @@ pv_correlate_case_table <- function(tab, by = c("user", "app")) {
 #'
 #' @param registry a [pv_load_registry()] result.
 #' @param app an `app` value from `registry$subprocesses`.
+#' @param start_date,end_date,users optional global-filter passthrough,
+#'   see [pv_pull_subprocess_log()].
 #' @return a [pv_pull_subprocess_log()]-shaped `data.frame` plus
 #'   `process_id`/`subprocess`, unioned across every slot. Zero rows if
 #'   none has any log data yet.
 #' @export
-pv_app_log <- function(registry, app) {
+pv_app_log <- function(registry, app, start_date = NULL, end_date = NULL, users = NULL) {
   subs <- registry$subprocesses[registry$subprocesses$app == app & !is.na(registry$subprocesses$log_path), ]
   rows <- lapply(seq_len(nrow(subs)), function(i) {
-    log <- pv_pull_subprocess_log(registry, subs$process_id[i], subs$subprocess[i])
+    log <- pv_pull_subprocess_log(registry, subs$process_id[i], subs$subprocess[i], start_date = start_date, end_date = end_date, users = users)
     if (nrow(log) == 0) {
       return(NULL)
     }
@@ -160,14 +162,16 @@ pv_app_log <- function(registry, app) {
 #'
 #' @param registry a [pv_load_registry()] result.
 #' @param app an `app` value from `registry$subprocesses`.
+#' @param start_date,end_date,users optional global-filter passthrough,
+#'   see [pv_pull_subprocess_log()].
 #' @return a `data.frame`: `case_id`, `user_id` (primary user), `total_score`,
 #'   `conformance`. Zero rows if this app has no log data or no declared
 #'   step diagram anywhere it's scoped.
 #' @export
-pv_app_case_score_conformance <- function(registry, app) {
+pv_app_case_score_conformance <- function(registry, app, start_date = NULL, end_date = NULL, users = NULL) {
   subs <- registry$subprocesses[registry$subprocesses$app == app & !is.na(registry$subprocesses$log_path), ]
   tabs <- lapply(seq_len(nrow(subs)), function(i) {
-    log <- pv_pull_subprocess_log(registry, subs$process_id[i], subs$subprocess[i])
+    log <- pv_pull_subprocess_log(registry, subs$process_id[i], subs$subprocess[i], start_date = start_date, end_date = end_date, users = users)
     diagram <- registry$subprocess_diagrams[[paste(subs$process_id[i], subs$subprocess[i], sep = "::")]]
     if (nrow(log) == 0 || is.null(diagram)) {
       return(NULL)
@@ -191,11 +195,56 @@ pv_app_case_score_conformance <- function(registry, app) {
 #' @param registry a [pv_load_registry()] result.
 #' @param app an `app` value from `registry$subprocesses`.
 #' @param by `"user"` (default) or `"app"` (see [pv_score_compliance_correlation()]).
+#' @param start_date,end_date,users optional global-filter passthrough,
+#'   see [pv_pull_subprocess_log()].
 #' @return same shape as [pv_score_compliance_correlation()]'s.
 #' @export
-pv_app_score_compliance_correlation <- function(registry, app, by = c("user", "app")) {
+pv_app_score_compliance_correlation <- function(registry, app, by = c("user", "app"), start_date = NULL, end_date = NULL, users = NULL) {
   by <- match.arg(by)
-  pv_correlate_case_table(pv_app_case_score_conformance(registry, app), by)
+  pv_correlate_case_table(pv_app_case_score_conformance(registry, app, start_date = start_date, end_date = end_date, users = users), by)
+}
+
+#' Engagement-score correlation summary, one row per monitored app
+#'
+#' The Users & roles tab's app-level roll-up of the two app-wide
+#' correlations ([pv_score_time_trend()] and
+#' [pv_app_score_compliance_correlation()], both `by = "app"`) that the
+#' tab's own app picker otherwise shows one at a time -- lets a reader
+#' compare every app side by side instead of switching the picker
+#' repeatedly.
+#'
+#' @param registry a [pv_load_registry()] result.
+#' @param start_date,end_date,users optional global-filter passthrough,
+#'   see [pv_pull_subprocess_log()].
+#' @return a `data.frame`, one row per app with a `log_path` declared:
+#'   `app`, `n_users`, `time_r` (`NA` if fewer than 3 distinct weeks),
+#'   `n_weeks`, `compliance_r` (`NA` if fewer than 3 cases or no declared
+#'   step diagram), `n_cases`. Zero rows if no app is monitored.
+#' @export
+pv_app_engagement_summary <- function(registry, start_date = NULL, end_date = NULL, users = NULL) {
+  empty <- data.frame(
+    app = character(0), n_users = integer(0), time_r = numeric(0),
+    n_weeks = integer(0), compliance_r = numeric(0), n_cases = integer(0)
+  )
+  apps <- unique(registry$subprocesses$app[!is.na(registry$subprocesses$log_path)])
+  if (length(apps) == 0) {
+    return(empty)
+  }
+
+  rows <- lapply(apps, function(app) {
+    log <- pv_app_log(registry, app, start_date = start_date, end_date = end_date, users = users)
+    time_trend <- pv_score_time_trend(log, by = "app")
+    compliance <- pv_app_score_compliance_correlation(registry, app, by = "app", start_date = start_date, end_date = end_date, users = users)
+    data.frame(
+      app = app, n_users = length(unique(log$user_id)),
+      time_r = time_trend$r, n_weeks = time_trend$n_weeks,
+      compliance_r = compliance$r, n_cases = compliance$n_cases,
+      stringsAsFactors = FALSE
+    )
+  })
+  out <- do.call(rbind, rows)
+  rownames(out) <- NULL
+  out
 }
 
 #' Correlation between adoption (IGA) and overall step conformance,

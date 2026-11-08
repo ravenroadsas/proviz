@@ -113,3 +113,21 @@ test_that("pv_load_registry returns NULL adoption_source when none is declared",
   pv_registry_db_insert_process(db_path, "p1", "mp1", "Proc One", "owner", "not_started", "short")
   expect_null(pv_load_registry(db_path)$adoption_source)
 })
+
+test_that("pv_load_registry reads declared user roles", {
+  db_path <- local_fixture_db()
+  pv_registry_db_insert_process(db_path, "p1", "mp1", "Proc One", "owner", "not_started", "short")
+  pv_registry_db_upsert_user_role(db_path, "alice", "Analyst")
+  pv_registry_db_upsert_user_role(db_path, "bob", "Manager")
+  pv_registry_db_upsert_user_role(db_path, "alice", "Senior Analyst") # idempotent update
+
+  reg <- pv_load_registry(db_path)
+  expect_equal(reg$user_roles$user_id, c("alice", "bob"))
+  expect_equal(reg$user_roles$role, c("Senior Analyst", "Manager"))
+})
+
+test_that("pv_load_registry returns zero-row user_roles when none is declared", {
+  db_path <- local_fixture_db()
+  pv_registry_db_insert_process(db_path, "p1", "mp1", "Proc One", "owner", "not_started", "short")
+  expect_equal(nrow(pv_load_registry(db_path)$user_roles), 0)
+})

@@ -4,12 +4,17 @@
 \alias{pv_portfolio_active_rate_trend}
 \title{Portfolio-wide weekly active-rate trend}
 \usage{
-pv_portfolio_active_rate_trend(registry, adoption)
+pv_portfolio_active_rate_trend(registry, adoption, apps = NULL)
 }
 \arguments{
 \item{registry}{a \code{\link[=pv_load_registry]{pv_load_registry()}} result.}
 
 \item{adoption}{a \code{\link[=pv_load_adoption]{pv_load_adoption()}} result.}
+
+\item{apps}{character vector of \code{app} values to scope to, or \code{NULL}
+(default) for every app in the registry -- e.g. the Adoption tab's
+IGA table row selection, so the trend reflects only the selected
+app(s) instead of the whole portfolio.}
 }
 \value{
 a \code{data.frame}, ordered by week: \code{week} (\code{Date}), \code{pct_active}

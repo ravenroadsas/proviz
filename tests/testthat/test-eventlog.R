@@ -24,6 +24,24 @@ test_that("pv_pull_subprocess_log returns the empty schema for an unrecognized p
   expect_equal(nrow(log), 0)
 })
 
+test_that("pv_pull_subprocess_log applies an optional start_date/end_date/users filter before returning", {
+  registry <- local_fixture_registry()
+  log <- pv_pull_subprocess_log(registry, "type_curve_construction", "type_curve_module", users = "nobody")
+  expect_equal(nrow(log), 0)
+})
+
+test_that("pv_pull_portfolio_log unions every instrumented process's log", {
+  registry <- local_fixture_registry()
+  log <- pv_pull_portfolio_log(registry)
+  expect_equal(unique(log$session_id), "s1")
+})
+
+test_that("pv_pull_portfolio_log returns the empty schema when no process is instrumented", {
+  registry <- local_fixture_registry()
+  registry$processes$status <- "not_started"
+  expect_equal(nrow(pv_pull_portfolio_log(registry)), 0)
+})
+
 test_that("pv_session_step_sequences orders each session's steps by started_at", {
   log <- data.frame(
     session_id = c("s1", "s1", "s2"), step_id = c("b", "a", "x"),

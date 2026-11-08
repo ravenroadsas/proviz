@@ -119,3 +119,22 @@ test_that("pv_portfolio_iga returns one row per app", {
   expect_equal(tab$app, "app1")
   expect_equal(tab$n_users, 1)
 })
+
+test_that("pv_portfolio_active_rate_trend scopes to the given apps, e.g. an Adoption-tab table row selection", {
+  reg <- fixture_adoption_registry()
+  reg$subprocesses <- rbind(reg$subprocesses, data.frame(
+    process_id = "p1", app = "app2", subprocess = "sub2", app_link = NA_character_,
+    log_path = "y", adoption_threshold = 5, stringsAsFactors = FALSE
+  ))
+  testthat::local_mocked_bindings(pv_pull_subprocess_log = function(...) fixture_log_for_app1(), .package = "proviz")
+  adoption <- list(
+    app1 = list(users = data.frame(user_id = "u1", trained = TRUE, stringsAsFactors = FALSE), satisfaction = 90),
+    app2 = list(users = data.frame(user_id = "u1", trained = TRUE, stringsAsFactors = FALSE), satisfaction = 90)
+  )
+
+  full <- pv_portfolio_active_rate_trend(reg, adoption)
+  expect_true(all(full$n_apps == 2)) # both apps contribute every week
+
+  scoped <- pv_portfolio_active_rate_trend(reg, adoption, apps = "app1")
+  expect_true(all(scoped$n_apps == 1))
+})

@@ -276,12 +276,16 @@ pv_app_iga <- function(registry, app, adoption) {
 #'
 #' @param registry a [pv_load_registry()] result.
 #' @param adoption a [pv_load_adoption()] result.
+#' @param apps character vector of `app` values to scope to, or `NULL`
+#'   (default) for every app in the registry -- e.g. the Adoption tab's
+#'   IGA table row selection, so the trend reflects only the selected
+#'   app(s) instead of the whole portfolio.
 #' @return a `data.frame`, ordered by week: `week` (`Date`), `pct_active`
 #'   (mean across apps with data that week), `n_apps` (how many
 #'   contributed). Zero rows if no app has a computable weekly rate.
 #' @export
-pv_portfolio_active_rate_trend <- function(registry, adoption) {
-  apps <- unique(registry$subprocesses$app)
+pv_portfolio_active_rate_trend <- function(registry, adoption, apps = NULL) {
+  if (is.null(apps)) apps <- unique(registry$subprocesses$app)
   per_app <- do.call(rbind, c(
     lapply(apps, function(app) pv_app_weekly_active_rate(registry, app, adoption)),
     list(NULL)

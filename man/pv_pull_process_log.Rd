@@ -4,12 +4,21 @@
 \alias{pv_pull_process_log}
 \title{Pull every subprocess of a process's log, unioned}
 \usage{
-pv_pull_process_log(registry, process_id)
+pv_pull_process_log(
+  registry,
+  process_id,
+  start_date = NULL,
+  end_date = NULL,
+  users = NULL
+)
 }
 \arguments{
 \item{registry}{a \code{\link[=pv_load_registry]{pv_load_registry()}} result.}
 
 \item{process_id}{a \code{process_id} from \code{registry$processes}.}
+
+\item{start_date, end_date, users}{optional global-filter passthrough,
+see \code{\link[=pv_pull_subprocess_log]{pv_pull_subprocess_log()}}.}
 }
 \value{
 a \code{data.frame}, \code{\link[=pv_pull_subprocess_log]{pv_pull_subprocess_log()}}'s shape plus

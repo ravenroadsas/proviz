@@ -202,20 +202,18 @@ pv_weekly_active_users <- function(log) {
 #' Portfolio-wide KPIs, across every instrumented business process
 #'
 #' @param registry a [pv_load_registry()] result.
+#' @param start_date,end_date,users optional global-filter passthrough,
+#'   see [pv_pull_subprocess_log()].
 #' @return a list: `n_processes`, `n_instrumented`, `n_apps`,
 #'   `n_apps_monitored`, `apps_pct`, `n_cases`, `n_users`,
 #'   `n_weekly_users`, `completion_pct` (see [pv_portfolio_completion()]).
 #' @export
-pv_portfolio_kpis <- function(registry) {
-  instrumented_ids <- registry$processes$process_id[registry$processes$status == "instrumented"]
-  all_log <- do.call(rbind, c(
-    lapply(instrumented_ids, function(pid) pv_pull_process_log(registry, pid)),
-    list(cbind(pv_empty_log(), subprocess = character(0)))
-  ))
+pv_portfolio_kpis <- function(registry, start_date = NULL, end_date = NULL, users = NULL) {
+  all_log <- pv_pull_portfolio_log(registry, start_date = start_date, end_date = end_date, users = users)
 
   coverage <- pv_coverage(registry)
   app_cov <- pv_app_coverage(registry)$portfolio
-  completion <- pv_portfolio_completion(registry)
+  completion <- pv_portfolio_completion(registry, start_date = start_date, end_date = end_date, users = users)
 
   list(
     n_processes = coverage$total, n_instrumented = coverage$instrumented,
@@ -233,11 +231,13 @@ pv_portfolio_kpis <- function(registry) {
 #' matrix, long-form, ready to hand to a heatmap.
 #'
 #' @param registry a [pv_load_registry()] result.
+#' @param start_date,end_date,users optional global-filter passthrough,
+#'   see [pv_pull_subprocess_log()].
 #' @return a `data.frame`, long-form: `process_id`, `process` (label),
 #'   `user_id`, `n_cases`. Zero rows if no instrumented process has any
 #'   log data yet.
 #' @export
-pv_portfolio_heatmap <- function(registry) {
+pv_portfolio_heatmap <- function(registry, start_date = NULL, end_date = NULL, users = NULL) {
   empty <- data.frame(process_id = character(0), process = character(0), user_id = character(0), n_cases = integer(0))
 
   instrumented_ids <- registry$processes$process_id[registry$processes$status == "instrumented"]
@@ -246,7 +246,7 @@ pv_portfolio_heatmap <- function(registry) {
   }
 
   rows <- lapply(instrumented_ids, function(pid) {
-    log <- pv_pull_process_log(registry, pid)
+    log <- pv_pull_process_log(registry, pid, start_date = start_date, end_date = end_date, users = users)
     if (nrow(log) == 0) {
       return(NULL)
     }
@@ -279,11 +279,13 @@ pv_portfolio_heatmap <- function(registry) {
 #' @param registry a [pv_load_registry()] result.
 #' @param process_ids character vector of `process_id`s to scope to, or
 #'   `NULL` (default) for every monitored app across the whole portfolio.
+#' @param start_date,end_date,users optional global-filter passthrough,
+#'   see [pv_pull_subprocess_log()].
 #' @return a `data.frame`, long-form: `process_id`, `process` (label),
 #'   `app`, `subprocess`, `user_id`, `n_cases`. Zero rows if none of the
 #'   scoped apps has a `log_path` or any log data yet.
 #' @export
-pv_app_heatmap <- function(registry, process_ids = NULL) {
+pv_app_heatmap <- function(registry, process_ids = NULL, start_date = NULL, end_date = NULL, users = NULL) {
   empty <- data.frame(
     process_id = character(0), process = character(0), app = character(0),
     subprocess = character(0), user_id = character(0), n_cases = integer(0)
@@ -298,7 +300,7 @@ pv_app_heatmap <- function(registry, process_ids = NULL) {
   }
 
   rows <- lapply(seq_len(nrow(subs)), function(i) {
-    log <- pv_pull_subprocess_log(registry, subs$process_id[i], subs$subprocess[i])
+    log <- pv_pull_subprocess_log(registry, subs$process_id[i], subs$subprocess[i], start_date = start_date, end_date = end_date, users = users)
     if (nrow(log) == 0) {
       return(NULL)
     }
@@ -335,22 +337,24 @@ pv_app_heatmap <- function(registry, process_ids = NULL) {
 #' [pv_process_outcome_distribution()]'s docs for the same limitation).
 #'
 #' @param registry a [pv_load_registry()] result.
+#' @param start_date,end_date,users optional global-filter passthrough,
+#'   see [pv_pull_subprocess_log()].
 #' @return `registry$processes` with added columns: `n_apps`,
 #'   `n_apps_monitored`, `apps_pct`, `n_cases`, `n_users`,
 #'   `median_duration_mins`, `conformance_median`, `completion_pct`.
 #' @export
-pv_registry_kpis <- function(registry) {
+pv_registry_kpis <- function(registry, start_date = NULL, end_date = NULL, users = NULL) {
   instrumented <- registry$processes[registry$processes$status == "instrumented", ]
   app_cov <- pv_app_coverage(registry)$by_process
 
   kpi_rows <- lapply(instrumented$process_id, function(pid) {
-    log <- pv_pull_process_log(registry, pid)
+    log <- pv_pull_process_log(registry, pid, start_date = start_date, end_date = end_date, users = users)
     subs <- registry$subprocesses[registry$subprocesses$process_id == pid, ]
     conf_medians <- vapply(subs$subprocess, function(sp) {
-      conf <- pv_subprocess_conformance(registry, pid, sp)
+      conf <- pv_subprocess_conformance(registry, pid, sp, start_date = start_date, end_date = end_date, users = users)
       if (nrow(conf) == 0) NA_real_ else stats::median(conf$score, na.rm = TRUE)
     }, numeric(1))
-    completion <- pv_process_completion_rate(registry, pid)
+    completion <- pv_process_completion_rate(registry, pid, start_date = start_date, end_date = end_date, users = users)
     data.frame(
       process_id = pid,
       n_cases = if (nrow(log) == 0) 0L else length(unique(log$session_id)),

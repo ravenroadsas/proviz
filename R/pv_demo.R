@@ -45,6 +45,8 @@ pv_demo_registry <- function(dir = tempfile("proviz_demo_"), seed = 42) {
     "Legacy Ticketing (retired)", "Ops Lead", "deprecated", "short"
   )
 
+  pv_demo_seed_user_roles(db_path)
+
   adoption_path <- pv_demo_seed_adoption_workbook(
     dir = dir,
     draft_users = c("l.fontaine", "m.adeyemi", "n.petrov", "o.haddad"), draft_untrained = "o.haddad",
@@ -235,6 +237,24 @@ pv_demo_seed_subprocess_diagram <- function(db_path, process_id, subprocess, wei
   }
   for (o in outcomes) {
     pv_registry_db_upsert_subprocess_outcome(db_path, process_id, subprocess, o$id, o$label, o$kind, o$step_id)
+  }
+  invisible(NULL)
+}
+
+#' Seed a role for every demo user (including the identified-but-never-
+#' logged-in ones from the adoption workbook) -- so the dashboard's role
+#' filter has something non-trivial to show.
+#' @noRd
+pv_demo_seed_user_roles <- function(db_path) {
+  roles <- c(
+    l.fontaine = "Reservoir Engineer", m.adeyemi = "Reservoir Engineer",
+    n.petrov = "Reservoir Engineer", o.haddad = "Reservoir Engineer", p.silva = "Reservoir Engineer",
+    q.alvarez = "Senior Reviewer", r.kim = "Senior Reviewer", s.khan = "Senior Reviewer",
+    a.reyes = "Production Engineer", b.chen = "Production Engineer", c.novak = "Production Engineer",
+    d.singh = "Production Engineer", h.muller = "Production Engineer", e.ortiz = "Production Engineer"
+  )
+  for (user_id in names(roles)) {
+    pv_registry_db_upsert_user_role(db_path, user_id, roles[[user_id]])
   }
   invisible(NULL)
 }

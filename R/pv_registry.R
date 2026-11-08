@@ -19,6 +19,9 @@
 #'     clicks to one step. Not consulted when reading a real log (see
 #'     [pv_pull_subprocess_log()]) -- only relevant for a future
 #'     telemetry-config export.
+#'   \item **User roles** -- `$user_roles`: a flat `user_id` -> `role`
+#'     lookup. The real event log carries no role column, so this is
+#'     the only source for a role filter/breakdown.
 #' }
 #' The fourth artifact, the actual log records, is never part of the
 #' registry -- it's read straight from each subprocess's `log_path`.
@@ -53,6 +56,8 @@
 #'       of `data.frame`s: `id`, `step_id`, `label`, `selector`, `kind`,
 #'       `feature`, `event`, `weight`. Absent for a subprocess with no
 #'       declared clicks yet.}
+#'     \item{`$user_roles`}{a `data.frame`: `user_id`, `role`. Zero rows
+#'       if none declared.}
 #'     \item{`$adoption_source`}{path to the yearly training/satisfaction
 #'       Excel workbook (see [pv_load_adoption()]) -- `NULL` if the
 #'       registry's `settings` table has no `adoption_source` row.}
@@ -97,11 +102,13 @@ pv_load_registry <- function(path = system.file("registry/registry.duckdb", pack
     pv_resolve_registry_path(adoption_source[1], base_dir)
   }
 
+  user_roles <- DBI::dbGetQuery(con, "SELECT * FROM user_roles ORDER BY user_id")
+
   structure(
     list(
       processes = processes, subprocesses = subprocesses,
       process_diagrams = process_diagrams, subprocess_diagrams = subprocess_diagrams,
-      clicks = clicks, adoption_source = adoption_source
+      clicks = clicks, user_roles = user_roles, adoption_source = adoption_source
     ),
     class = "pv_registry"
   )

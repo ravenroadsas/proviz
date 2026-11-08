@@ -39,19 +39,25 @@ mod_adoption_ui <- function(id) {
     ),
     bslib::card(
       fill = FALSE,
-      bslib::card_header("Weekly active-users rate (portfolio average)"),
+      bslib::card_header("Adoption index (IGA) by app"),
+      shiny::helpText(
+        style = "padding: 0 0.95rem;",
+        "Select one or more rows to scope the weekly active-users trend below to just those apps -- ",
+        "none selected shows the whole portfolio's average."
+      ),
+      DT::DTOutput(ns("iga_table"), fill = FALSE)
+    ),
+    bslib::card(
+      fill = FALSE,
+      bslib::card_header("Weekly active-users rate"),
       shiny::helpText(
         style = "padding: 0 0.95rem;",
         "Training and satisfaction are yearly snapshots -- this is the one IGA component with a real ",
         "week-to-week trend: the share of each app's identified users averaging more than its declared ",
-        "usage threshold that week, averaged across every app with one declared."
+        "usage threshold that week, averaged across the selected app(s) above (or every app with one ",
+        "declared, if none are selected)."
       ),
       plotly::plotlyOutput(ns("trend_plot"), height = "260px")
-    ),
-    bslib::card(
-      fill = FALSE,
-      bslib::card_header("Adoption index (IGA) by app"),
-      DT::DTOutput(ns("iga_table"), fill = FALSE)
     ),
     bslib::card(
       fill = FALSE,
@@ -114,11 +120,19 @@ mod_adoption_server <- function(id, registry, adoption, refresh = shiny::reactiv
     })
     output$kpi_users <- shiny::renderText(as.character(sum(iga_tab()$n_users)))
 
+    selected_apps <- shiny::reactive({
+      rows <- input$iga_table_rows_selected
+      if (is.null(rows) || length(rows) == 0) {
+        return(NULL)
+      }
+      iga_tab()$app[rows]
+    })
+
     output$trend_plot <- plotly::renderPlotly({
       refresh()
       shiny::req(registry())
       ad <- adoption() %||% list()
-      trend <- pv_portfolio_active_rate_trend(registry(), ad)
+      trend <- pv_portfolio_active_rate_trend(registry(), ad, apps = selected_apps())
       shiny::validate(shiny::need(nrow(trend) > 0, "No usage-threshold data yet (declare 'adoption_threshold' per app and load an adoption workbook)."))
       plotly::plot_ly(trend,
         x = ~week, y = ~pct_active, type = "scatter", mode = "lines+markers",
@@ -132,7 +146,7 @@ mod_adoption_server <- function(id, registry, adoption, refresh = shiny::reactiv
       tab <- iga_tab()
       shiny::validate(shiny::need(nrow(tab) > 0, "No apps scoped yet."))
       DT::datatable(
-        pv_iga_display_table(tab), rownames = FALSE, escape = FALSE,
+        pv_iga_display_table(tab), rownames = FALSE, escape = FALSE, selection = "multiple",
         options = list(dom = "t", pageLength = 20), class = "compact stripe"
       )
     })

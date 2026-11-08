@@ -5,13 +5,22 @@
 \title{User activity heatmap at app granularity, within a chosen set of
 business processes}
 \usage{
-pv_app_heatmap(registry, process_ids = NULL)
+pv_app_heatmap(
+  registry,
+  process_ids = NULL,
+  start_date = NULL,
+  end_date = NULL,
+  users = NULL
+)
 }
 \arguments{
 \item{registry}{a \code{\link[=pv_load_registry]{pv_load_registry()}} result.}
 
 \item{process_ids}{character vector of \code{process_id}s to scope to, or
 \code{NULL} (default) for every monitored app across the whole portfolio.}
+
+\item{start_date, end_date, users}{optional global-filter passthrough,
+see \code{\link[=pv_pull_subprocess_log]{pv_pull_subprocess_log()}}.}
 }
 \value{
 a \code{data.frame}, long-form: \code{process_id}, \code{process} (label),

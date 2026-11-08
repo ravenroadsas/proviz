@@ -22,4 +22,9 @@ test_that("pv_demo_registry produces a loadable registry with real logs and both
 
   dist <- pv_process_outcome_distribution(reg, "type_curve_construction")
   expect_true(all(c("publish_official", "incomplete") %in% dist$outcome_id)) # some rejected, some published
+
+  # Every demo user, including the identified-but-never-logged-in ones
+  # from the adoption workbook, has a declared role.
+  expect_true(all(c("l.fontaine", "q.alvarez", "a.reyes", "p.silva") %in% reg$user_roles$user_id))
+  expect_equal(reg$user_roles$role[reg$user_roles$user_id == "a.reyes"], "Production Engineer")
 })

@@ -17,6 +17,10 @@
 #'     step. This is what a future telemetry-config export would be
 #'     built from; it is not consulted when reading a real event log,
 #'     which already arrives with its weight totals pre-computed.
+#'   \item **User roles** -- `user_roles`: a flat `user_id` -> `role`
+#'     lookup, independent of any process/app/log -- the one piece of
+#'     resource metadata the real event log itself doesn't carry (it has
+#'     no role column), needed for a role filter on the dashboard.
 #' }
 #' The fourth artifact, the actual log records, is never stored here --
 #' see [pv_pull_subprocess_log()], which reads it straight from each
@@ -129,6 +133,12 @@ pv_registry_db_create_schema <- function(con) {
     CREATE TABLE IF NOT EXISTS settings (
       key TEXT PRIMARY KEY,
       value TEXT
+    )")
+
+  DBI::dbExecute(con, "
+    CREATE TABLE IF NOT EXISTS user_roles (
+      user_id TEXT PRIMARY KEY,
+      role TEXT NOT NULL
     )")
 
   invisible(con)
@@ -289,6 +299,21 @@ pv_registry_db_upsert_click <- function(path, process_id, subprocess, click_id, 
       process_id, subprocess, click_id, step_id, label, selector, kind, feature, event, as.numeric(weight)
     ))
   invisible(click_id)
+}
+
+#' Add or update a user's role. There is no dependency on `subprocesses`
+#' or any log -- a role can be declared for a user who hasn't logged any
+#' activity yet (e.g. a newly identified user from the adoption
+#' workbook). Idempotent on `user_id`.
+#' @noRd
+pv_registry_db_upsert_user_role <- function(path, user_id, role) {
+  con <- pv_registry_db_connect(path)
+  on.exit(DBI::dbDisconnect(con, shutdown = TRUE), add = TRUE)
+  DBI::dbExecute(con, "
+    INSERT INTO user_roles VALUES (?, ?)
+    ON CONFLICT (user_id) DO UPDATE SET role = excluded.role",
+    params = list(user_id, role))
+  invisible(user_id)
 }
 
 #' Set (or replace) the registry-wide `adoption_source` setting -- a path

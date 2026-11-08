@@ -5,12 +5,21 @@
 \title{Per-session score and conformance for one app, pooled across every
 (process, subprocess) slot it occupies}
 \usage{
-pv_app_case_score_conformance(registry, app)
+pv_app_case_score_conformance(
+  registry,
+  app,
+  start_date = NULL,
+  end_date = NULL,
+  users = NULL
+)
 }
 \arguments{
 \item{registry}{a \code{\link[=pv_load_registry]{pv_load_registry()}} result.}
 
 \item{app}{an \code{app} value from \code{registry$subprocesses}.}
+
+\item{start_date, end_date, users}{optional global-filter passthrough,
+see \code{\link[=pv_pull_subprocess_log]{pv_pull_subprocess_log()}}.}
 }
 \value{
 a \code{data.frame}: \code{case_id}, \code{user_id} (primary user), \code{total_score},

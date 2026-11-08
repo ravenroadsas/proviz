@@ -5,7 +5,14 @@
 \title{Correlation between a session's engagement score and its conformance,
 for one app, pooled across every (process, subprocess) slot it occupies}
 \usage{
-pv_app_score_compliance_correlation(registry, app, by = c("user", "app"))
+pv_app_score_compliance_correlation(
+  registry,
+  app,
+  by = c("user", "app"),
+  start_date = NULL,
+  end_date = NULL,
+  users = NULL
+)
 }
 \arguments{
 \item{registry}{a \code{\link[=pv_load_registry]{pv_load_registry()}} result.}
@@ -13,6 +20,9 @@ pv_app_score_compliance_correlation(registry, app, by = c("user", "app"))
 \item{app}{an \code{app} value from \code{registry$subprocesses}.}
 
 \item{by}{\code{"user"} (default) or \code{"app"} (see \code{\link[=pv_score_compliance_correlation]{pv_score_compliance_correlation()}}).}
+
+\item{start_date, end_date, users}{optional global-filter passthrough,
+see \code{\link[=pv_pull_subprocess_log]{pv_pull_subprocess_log()}}.}
 }
 \value{
 same shape as \code{\link[=pv_score_compliance_correlation]{pv_score_compliance_correlation()}}'s.

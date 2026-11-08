@@ -8,7 +8,9 @@ mod_app_detail_server(
   id,
   registry,
   selected_app,
-  refresh = shiny::reactive(NULL)
+  refresh = shiny::reactive(NULL),
+  date_range = shiny::reactive(NULL),
+  users = shiny::reactive(NULL)
 )
 }
 \arguments{
@@ -22,6 +24,9 @@ detail"), or \code{NULL}.}
 
 \item{refresh}{a reactive (any value) bumped whenever logs should be
 re-read.}
+
+\item{date_range, users}{reactives giving the dashboard's global
+sidebar filters (see \code{\link[=mod_filters_server]{mod_filters_server()}}).}
 }
 \description{
 Server logic for the app detail tab

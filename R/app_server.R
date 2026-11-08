@@ -33,24 +33,34 @@ app_server <- function(initial_registry) {
       paste("Data as of", format(data_as_of(), "%Y-%m-%d %H:%M"))
     })
 
-    overview <- mod_overview_server("overview", registry = registry, refresh = data_as_of)
+    filters <- mod_filters_server("filters", registry = registry, refresh = data_as_of)
+
+    overview <- mod_overview_server("overview",
+      registry = registry, refresh = data_as_of, date_range = filters$date_range, users = filters$users
+    )
     business_detail <- mod_business_detail_server("business_detail",
-      registry = registry, selected_process = overview$selected_process, refresh = data_as_of
+      registry = registry, selected_process = overview$selected_process, refresh = data_as_of,
+      date_range = filters$date_range, users = filters$users
     )
     mod_app_detail_server("app_detail",
-      registry = registry, selected_app = business_detail$selected_app, refresh = data_as_of
+      registry = registry, selected_app = business_detail$selected_app, refresh = data_as_of,
+      date_range = filters$date_range, users = filters$users
     )
-    mod_heatmap_server("heatmap", registry = registry, refresh = data_as_of)
+    mod_heatmap_server("heatmap",
+      registry = registry, refresh = data_as_of, date_range = filters$date_range, users = filters$users
+    )
     mod_adoption_server("adoption", registry = registry, adoption = adoption, refresh = data_as_of)
 
     shiny::observeEvent(overview$selected_process(), {
       shiny::req(overview$selected_process())
-      bslib::nav_select("main_nav", "business_detail", session = session)
+      bslib::nav_select("main_nav", "business_process", session = session)
+      bslib::nav_select("business_process_nav", "process_detail", session = session)
     })
 
     shiny::observeEvent(business_detail$selected_app(), {
       shiny::req(business_detail$selected_app())
-      bslib::nav_select("main_nav", "app_detail", session = session)
+      bslib::nav_select("main_nav", "business_process", session = session)
+      bslib::nav_select("business_process_nav", "app_detail", session = session)
     })
   }
 }

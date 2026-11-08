@@ -4,10 +4,18 @@
 \alias{pv_portfolio_completion}
 \title{Portfolio-wide completion rate}
 \usage{
-pv_portfolio_completion(registry)
+pv_portfolio_completion(
+  registry,
+  start_date = NULL,
+  end_date = NULL,
+  users = NULL
+)
 }
 \arguments{
 \item{registry}{a \code{\link[=pv_load_registry]{pv_load_registry()}} result.}
+
+\item{start_date, end_date, users}{optional global-filter passthrough,
+see \code{\link[=pv_pull_subprocess_log]{pv_pull_subprocess_log()}}.}
 }
 \value{
 a list: \code{n_cases}, \code{n_completed}, \code{pct} (\code{NA} if no
