@@ -1,18 +1,12 @@
 test_that("mod_app_detail_server computes KPIs and variants once an app is picked", {
-  # updateSelectInput() has no real client to echo the choice back into
-  # input$process_picker/app_picker under testServer() (confirmed: this is
-  # a general testServer limitation, not specific to this module) -- that
-  # round trip is exactly what a Playwright-driven browser run would
-  # verify end-to-end. Here, set the inputs directly, as the browser would
-  # after receiving the update, and test the reactive chain downstream of it.
   registry <- local_fixture_registry()
 
   shiny::testServer(mod_app_detail_server, args = list(
-    registry = shiny::reactiveVal(registry), selected_app = shiny::reactiveVal(NULL)
+    registry = shiny::reactiveVal(registry),
+    date_range = shiny::reactiveVal(as.Date(c("2026-01-01", "2026-01-02"))),
+    app = shiny::reactiveVal(list(process_id = "type_curve_construction", subprocess = "type_curve_module"))
   ), {
-    session$setInputs(process_picker = "type_curve_construction", app_picker = "type_curve_module")
-    session$setInputs(date_range = c(as.Date("2026-01-01"), as.Date("2026-01-02")))
-
+    session$flushReact()
     log <- raw_log()
     expect_equal(nrow(log), 2)
 
@@ -26,5 +20,16 @@ test_that("mod_app_detail_server computes KPIs and variants once an app is picke
     expect_equal(dist$label, "B done")
     expect_equal(dist$n_cases, 1)
     expect_true(nzchar(output$outcomes_table)) # renders without error
+  })
+})
+
+test_that("mod_app_detail_server shows its no-data note when no app is monitored yet", {
+  registry <- local_fixture_registry()
+
+  shiny::testServer(mod_app_detail_server, args = list(
+    registry = shiny::reactiveVal(registry), app = shiny::reactiveVal(NULL)
+  ), {
+    session$flushReact()
+    expect_true(any(grepl("No app is monitored yet", as.character(output$no_data_note), fixed = TRUE)))
   })
 })

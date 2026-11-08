@@ -33,10 +33,13 @@ pv_heatmap_columns <- function(long, by_app) {
 
 #' Users tab: a heatmap of activity across the whole process portfolio --
 #' the portfolio-wide, side-by-side view the business/app detail tabs'
-#' own filters can't give. Filter to a role via the dashboard's global
-#' sidebar (see [mod_filters_server()]) -- the real event log itself (see
-#' [pv_pull_subprocess_log()]) carries no role column, so this tab has no
-#' role breakdown of its own.
+#' own filters can't give. Narrows to one business process when the
+#' sidebar's shared process picker (see [mod_filters_server()]) has one
+#' selected, rather than keeping its own separate multi-process filter --
+#' "(All processes)" (the default) is how to get the side-by-side,
+#' every-process view back. Filter to a role via the same sidebar -- the
+#' real event log itself (see [pv_pull_subprocess_log()]) carries no role
+#' column, so this tab has no role breakdown of its own.
 #'
 #' @param id module id.
 #' @export
@@ -47,16 +50,7 @@ mod_heatmap_ui <- function(id) {
       fill = FALSE,
       bslib::card_body(
         style = "padding-bottom: 4px;",
-        shiny::fluidRow(
-          shiny::column(
-            8,
-            shiny::selectizeInput(ns("process_filter"), "Business processes", choices = NULL, multiple = TRUE, width = "100%")
-          ),
-          shiny::column(
-            4,
-            shiny::checkboxInput(ns("show_apps"), "Break down by app", value = FALSE)
-          )
-        )
+        shiny::checkboxInput(ns("show_apps"), "Break down by app", value = FALSE)
       )
     ),
     bslib::card(
@@ -79,9 +73,9 @@ mod_heatmap_ui <- function(id) {
         "Score vs. compliance: do a user's higher-scoring cases also tend to follow the declared step diagram more closely?"
       ),
       DT::DTOutput(ns("app_summary_table"), fill = FALSE),
-      shiny::div(
-        style = "padding: 0 0.95rem 0.5rem;",
-        shiny::selectInput(ns("corr_app_picker"), "App", choices = NULL, width = "300px")
+      shiny::helpText(
+        style = "padding: 0 0.95rem;",
+        "The per-user breakdown below follows the app picked in the sidebar filters."
       ),
       shiny::div(
         class = "pv-kpi-row", style = "padding: 0 0.95rem;",
@@ -103,52 +97,39 @@ mod_heatmap_ui <- function(id) {
 #' @param registry a reactive returning the current [pv_load_registry()] result.
 #' @param refresh a reactive (any value) bumped whenever logs should be
 #'   re-read.
-#' @param date_range,users reactives giving the dashboard's global
-#'   sidebar filters (see [mod_filters_server()]); `users()` already
-#'   resolves any role selection.
+#' @param date_range,users,process_id,app reactives giving the
+#'   dashboard's global sidebar filters (see [mod_filters_server()]);
+#'   `users()` already resolves any role selection. `process_id()` is a
+#'   sentinel value (never a real `process_id`) for "(All processes)"
+#'   (every instrumented process, side by side); `app()` is
+#'   `list(process_id, subprocess)`, or `NULL`.
 #' @export
 mod_heatmap_server <- function(id, registry, refresh = shiny::reactive(NULL),
-                                date_range = shiny::reactive(NULL), users = shiny::reactive(NULL)) {
+                                date_range = shiny::reactive(NULL), users = shiny::reactive(NULL),
+                                process_id = shiny::reactive(NULL), app = shiny::reactive(NULL)) {
   shiny::moduleServer(id, function(input, output, session) {
-    process_choices <- shiny::reactive({
-      shiny::req(registry())
-      procs <- registry()$processes[registry()$processes$status == "instrumented", ]
-      stats::setNames(procs$process_id, procs$process)
-    })
-
-    shiny::observe({
-      choices <- process_choices()
-      shiny::updateSelectizeInput(session, "process_filter", choices = choices, selected = unname(choices))
-    })
-
-    app_choices <- shiny::reactive({
-      shiny::req(registry())
-      unique(registry()$subprocesses$app[!is.na(registry()$subprocesses$log_path)])
-    })
-
-    shiny::observe({
-      choices <- app_choices()
-      shiny::req(length(choices) > 0)
-      current <- if (!is.null(input$corr_app_picker) && input$corr_app_picker %in% choices) input$corr_app_picker else choices[1]
-      shiny::updateSelectInput(session, "corr_app_picker", choices = choices, selected = current)
+    corr_app_name <- shiny::reactive({
+      shiny::req(registry(), app())
+      subs <- registry()$subprocesses
+      subs$app[subs$process_id == app()$process_id & subs$subprocess == app()$subprocess][1]
     })
 
     app_log <- shiny::reactive({
       refresh()
-      shiny::req(registry(), input$corr_app_picker)
+      shiny::req(registry(), corr_app_name())
       rng <- date_range()
-      pv_app_log(registry(), input$corr_app_picker, start_date = rng[1], end_date = rng[2], users = users())
+      pv_app_log(registry(), corr_app_name(), start_date = rng[1], end_date = rng[2], users = users())
     })
 
     output$kpi_time_r <- shiny::renderText({
-      shiny::req(input$corr_app_picker)
+      shiny::req(corr_app_name())
       r <- pv_score_time_trend(app_log(), by = "app")$r
       if (is.na(r)) "--" else sprintf("%.2f", r)
     })
     output$kpi_compliance_r <- shiny::renderText({
-      shiny::req(registry(), input$corr_app_picker)
+      shiny::req(registry(), corr_app_name())
       rng <- date_range()
-      r <- pv_app_score_compliance_correlation(registry(), input$corr_app_picker, by = "app", start_date = rng[1], end_date = rng[2], users = users())$r
+      r <- pv_app_score_compliance_correlation(registry(), corr_app_name(), by = "app", start_date = rng[1], end_date = rng[2], users = users())$r
       if (is.na(r)) "--" else sprintf("%.2f", r)
     })
 
@@ -170,7 +151,7 @@ mod_heatmap_server <- function(id, registry, refresh = shiny::reactive(NULL),
     })
 
     output$time_corr_table <- DT::renderDT({
-      shiny::req(input$corr_app_picker)
+      shiny::req(corr_app_name())
       tab <- pv_score_time_trend(app_log(), by = "user")
       shiny::validate(shiny::need(nrow(tab) > 0, "No events logged yet for this app."))
       display <- tab
@@ -179,9 +160,9 @@ mod_heatmap_server <- function(id, registry, refresh = shiny::reactive(NULL),
     })
 
     output$compliance_corr_table <- DT::renderDT({
-      shiny::req(registry(), input$corr_app_picker)
+      shiny::req(registry(), corr_app_name())
       rng <- date_range()
-      tab <- pv_app_score_compliance_correlation(registry(), input$corr_app_picker, by = "user", start_date = rng[1], end_date = rng[2], users = users())
+      tab <- pv_app_score_compliance_correlation(registry(), corr_app_name(), by = "user", start_date = rng[1], end_date = rng[2], users = users())
       shiny::validate(shiny::need(nrow(tab) > 0, "No events logged yet for this app."))
       display <- tab
       names(display) <- c("User", "r", "Cases")
@@ -191,7 +172,7 @@ mod_heatmap_server <- function(id, registry, refresh = shiny::reactive(NULL),
     heatmap_long <- shiny::reactive({
       refresh()
       shiny::req(registry())
-      selected <- if (!is.null(input$process_filter) && length(input$process_filter) > 0) input$process_filter else NULL
+      selected <- if (!is.null(process_id()) && !identical(process_id(), .pv_all_processes_sentinel)) process_id() else NULL
       rng <- date_range()
 
       long <- if (isTRUE(input$show_apps)) {

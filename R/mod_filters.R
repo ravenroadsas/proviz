@@ -1,24 +1,73 @@
-#' Global sidebar filters: date range, role, and users
+#' A non-empty sentinel for "(All processes)" -- `selectizeInput`/
+#' `selectInput`'s selectize widget renders an empty-string value's
+#' label as blank instead of showing its text, so this can't just be `""`.
+#' @noRd
+.pv_all_processes_sentinel <- "__all__"
+
+#' Global sidebar filters: business process, app, date range, role, and users
 #'
 #' The one filter bar every tab reads from, instead of each tab keeping
-#' its own separate date-range/user picker -- a reader filtering to "last
-#' month, Reservoir Engineers only" sees that same scope no matter which
-#' tab is open. Role isn't a column in the real event log itself (see
-#' [pv_load_registry()]'s `$user_roles` docs) -- the role multi-select is
-#' resolved against `$user_roles` into a set of `user_id`s, intersected
-#' with any explicitly selected users, before being handed to every tab
-#' as one `users` filter value (see [pv_pull_subprocess_log()]'s
-#' `start_date`/`end_date`/`users` passthrough params).
+#' its own separate process/app/date-range/user picker -- picking "Daily
+#' Production Surveillance" here drives Process detail, App detail, and
+#' Users & roles alike, with no "wait, which app am I even looking at"
+#' mismatch between tabs. Role isn't a column in the real event log
+#' itself (see [pv_load_registry()]'s `$user_roles` docs) -- the role
+#' multi-select is resolved against `$user_roles` into a set of
+#' `user_id`s, intersected with any explicitly selected users, before
+#' being handed to every tab as one `users` filter value (see
+#' [pv_pull_subprocess_log()]'s `start_date`/`end_date`/`users`
+#' passthrough params).
+#'
+#' The process picker includes a leading "(All processes)" choice
+#' (an empty string) -- its default -- for tabs that can meaningfully
+#' show a portfolio-wide view (Users & roles' heatmap); a tab that
+#' can't (Process detail, App detail) just degrades to its own existing
+#' "no data yet" empty state until a real process is picked, the same
+#' way it already degrades for a process with no logged events.
 #'
 #' @param id module id.
 #' @export
 mod_filters_ui <- function(id) {
   ns <- shiny::NS(id)
   shiny::tagList(
+    shiny::selectInput(ns("process_picker"), "Business process", choices = NULL, width = "100%"),
+    shiny::selectInput(ns("app_picker"), "App", choices = NULL, width = "100%"),
     shiny::dateRangeInput(ns("date_range"), "Case start date range", width = "100%"),
     shiny::selectizeInput(ns("roles"), "Roles", choices = NULL, multiple = TRUE, width = "100%"),
     shiny::selectizeInput(ns("users"), "Users", choices = NULL, multiple = TRUE, width = "100%")
   )
+}
+
+#' Every monitored app, as `app_picker` choices
+#'
+#' Values are `"<process_id>::<subprocess>"` (unique even if the same
+#' app name were ever reused under two processes) -- `"(process)"`
+#' is included in the label here since there's no process_picker
+#' selection narrowing the list yet.
+#' @noRd
+pv_filters_all_app_choices <- function(registry) {
+  subs <- registry$subprocesses[!is.na(registry$subprocesses$log_path), ]
+  if (nrow(subs) == 0) {
+    return(character(0))
+  }
+  proc_labels <- stats::setNames(registry$processes$process, registry$processes$process_id)
+  stats::setNames(
+    paste(subs$process_id, subs$subprocess, sep = "::"),
+    paste0(subs$app, " (", unname(proc_labels[subs$process_id]), ")")
+  )
+}
+
+#' One process's monitored app(s), as `app_picker` choices (see
+#' [pv_filters_all_app_choices()] for the value shape).
+#' @noRd
+pv_filters_process_app_choices <- function(registry, process_id) {
+  subs <- registry$subprocesses[
+    registry$subprocesses$process_id == process_id & !is.na(registry$subprocesses$log_path),
+  ]
+  if (nrow(subs) == 0) {
+    return(character(0))
+  }
+  stats::setNames(paste(subs$process_id, subs$subprocess, sep = "::"), subs$app)
 }
 
 #' Server logic for the global sidebar filters
@@ -27,13 +76,28 @@ mod_filters_ui <- function(id) {
 #' @param registry a reactive returning the current [pv_load_registry()] result.
 #' @param refresh a reactive (any value) bumped whenever logs should be
 #'   re-read -- e.g. the "Refresh data" button's timestamp.
-#' @return a list: `date_range` (a reactive giving the current
-#'   `c(start, end)` `Date`s), `users` (a reactive giving a character
-#'   vector of `user_id`s to keep, or `NULL` when neither a role nor a
-#'   user is selected -- no filter).
+#' @return a list:
+#'   \describe{
+#'     \item{`date_range`}{a reactive giving the current `c(start, end)` `Date`s.}
+#'     \item{`users`}{a reactive giving a character vector of `user_id`s
+#'       to keep, or `NULL` when neither a role nor a user is selected --
+#'       no filter.}
+#'     \item{`process_id`}{a reactive giving the selected `process_id`, or
+#'       a sentinel value (never a real `process_id`) for "(All processes)".}
+#'     \item{`app`}{a reactive giving `list(process_id, subprocess)` for
+#'       the selected app, or `NULL` if nothing is monitored yet.}
+#'     \item{`set_process`}{a plain function, `set_process(process_id)` --
+#'       jumps the shared picker to a process (e.g. from
+#'       [mod_overview_server()]'s "Open business process").}
+#'     \item{`set_app`}{a plain function, `set_app(list(process_id, subprocess))` --
+#'       jumps the shared picker to a specific app (e.g. from
+#'       [mod_business_detail_server()]'s "Open app detail").}
+#'   }
 #' @export
 mod_filters_server <- function(id, registry, refresh = shiny::reactive(NULL)) {
   shiny::moduleServer(id, function(input, output, session) {
+    pending_app_jump <- shiny::reactiveVal(NULL) # list(process_id, subprocess), consumed once by the app_picker cascade below
+
     portfolio_log <- shiny::reactive({
       refresh()
       shiny::req(registry())
@@ -63,6 +127,55 @@ mod_filters_server <- function(id, registry, refresh = shiny::reactive(NULL)) {
       shiny::updateSelectizeInput(session, "roles", choices = sort(unique(registry()$user_roles$role)), selected = input$roles)
     })
 
+    process_choices <- shiny::reactive({
+      shiny::req(registry())
+      procs <- registry()$processes[registry()$processes$status != "deprecated", ]
+      c("(All processes)" = .pv_all_processes_sentinel, stats::setNames(procs$process_id, procs$process))
+    })
+
+    shiny::observe({
+      choices <- process_choices()
+      shiny::req(length(choices) > 0)
+      current <- if (!is.null(input$process_picker) && input$process_picker %in% choices) input$process_picker else choices[1]
+      shiny::updateSelectInput(session, "process_picker", choices = choices, selected = current)
+    })
+
+    app_choices <- shiny::reactive({
+      shiny::req(registry())
+      if (identical(input$process_picker, .pv_all_processes_sentinel) || is.null(input$process_picker)) {
+        pv_filters_all_app_choices(registry())
+      } else {
+        pv_filters_process_app_choices(registry(), input$process_picker)
+      }
+    })
+
+    shiny::observeEvent(input$process_picker, {
+      choices <- app_choices()
+      pj <- pending_app_jump()
+      target <- NULL
+      if (!is.null(pj)) {
+        candidate <- paste(pj$process_id, pj$subprocess, sep = "::")
+        if (candidate %in% choices) target <- candidate
+      }
+      current <- if (!is.null(target)) {
+        target
+      } else if (!is.null(input$app_picker) && input$app_picker %in% choices) {
+        input$app_picker
+      } else if (length(choices) > 0) {
+        choices[1]
+      } else {
+        character(0)
+      }
+      shiny::updateSelectInput(session, "app_picker", choices = choices, selected = current)
+      pending_app_jump(NULL)
+    }, ignoreNULL = TRUE)
+
+    app <- shiny::reactive({
+      shiny::req(input$app_picker)
+      parts <- strsplit(input$app_picker, "::", fixed = TRUE)[[1]]
+      list(process_id = parts[1], subprocess = parts[2])
+    })
+
     effective_users <- shiny::reactive({
       has_role_filter <- length(input$roles) > 0
       has_user_filter <- length(input$users) > 0
@@ -80,6 +193,27 @@ mod_filters_server <- function(id, registry, refresh = shiny::reactive(NULL)) {
       if (length(candidates) == 0) "<proviz:no-match>" else candidates
     })
 
-    list(date_range = shiny::reactive(input$date_range), users = effective_users)
+    list(
+      date_range = shiny::reactive(input$date_range),
+      users = effective_users,
+      process_id = shiny::reactive(input$process_picker),
+      app = app,
+      set_process = function(process_id) {
+        shiny::updateSelectInput(session, "process_picker", selected = process_id)
+      },
+      set_app = function(sel) {
+        if (identical(input$process_picker, sel$process_id)) {
+          # The process isn't changing, so the process_picker
+          # observeEvent below (which is what normally consumes a
+          # pending jump) won't re-fire -- update app_picker directly.
+          choices <- app_choices()
+          candidate <- paste(sel$process_id, sel$subprocess, sep = "::")
+          shiny::updateSelectInput(session, "app_picker", selected = if (candidate %in% choices) candidate else choices[1])
+        } else {
+          pending_app_jump(sel)
+          shiny::updateSelectInput(session, "process_picker", selected = sel$process_id)
+        }
+      }
+    )
   })
 }

@@ -9,7 +9,9 @@ mod_heatmap_server(
   registry,
   refresh = shiny::reactive(NULL),
   date_range = shiny::reactive(NULL),
-  users = shiny::reactive(NULL)
+  users = shiny::reactive(NULL),
+  process_id = shiny::reactive(NULL),
+  app = shiny::reactive(NULL)
 )
 }
 \arguments{
@@ -20,9 +22,12 @@ mod_heatmap_server(
 \item{refresh}{a reactive (any value) bumped whenever logs should be
 re-read.}
 
-\item{date_range, users}{reactives giving the dashboard's global
-sidebar filters (see \code{\link[=mod_filters_server]{mod_filters_server()}}); \code{users()} already
-resolves any role selection.}
+\item{date_range, users, process_id, app}{reactives giving the
+dashboard's global sidebar filters (see \code{\link[=mod_filters_server]{mod_filters_server()}});
+\code{users()} already resolves any role selection. \code{process_id()} is a
+sentinel value (never a real \code{process_id}) for "(All processes)"
+(every instrumented process, side by side); \code{app()} is
+\code{list(process_id, subprocess)}, or \code{NULL}.}
 }
 \description{
 Server logic for the users heatmap tab

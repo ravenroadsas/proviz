@@ -2,7 +2,7 @@
 % Please edit documentation in R/mod_filters.R
 \name{mod_filters_ui}
 \alias{mod_filters_ui}
-\title{Global sidebar filters: date range, role, and users}
+\title{Global sidebar filters: business process, app, date range, role, and users}
 \usage{
 mod_filters_ui(id)
 }
@@ -11,12 +11,22 @@ mod_filters_ui(id)
 }
 \description{
 The one filter bar every tab reads from, instead of each tab keeping
-its own separate date-range/user picker -- a reader filtering to "last
-month, Reservoir Engineers only" sees that same scope no matter which
-tab is open. Role isn't a column in the real event log itself (see
-\code{\link[=pv_load_registry]{pv_load_registry()}}'s \verb{$user_roles} docs) -- the role multi-select is
-resolved against \verb{$user_roles} into a set of \code{user_id}s, intersected
-with any explicitly selected users, before being handed to every tab
-as one \code{users} filter value (see \code{\link[=pv_pull_subprocess_log]{pv_pull_subprocess_log()}}'s
-\code{start_date}/\code{end_date}/\code{users} passthrough params).
+its own separate process/app/date-range/user picker -- picking "Daily
+Production Surveillance" here drives Process detail, App detail, and
+Users & roles alike, with no "wait, which app am I even looking at"
+mismatch between tabs. Role isn't a column in the real event log
+itself (see \code{\link[=pv_load_registry]{pv_load_registry()}}'s \verb{$user_roles} docs) -- the role
+multi-select is resolved against \verb{$user_roles} into a set of
+\code{user_id}s, intersected with any explicitly selected users, before
+being handed to every tab as one \code{users} filter value (see
+\code{\link[=pv_pull_subprocess_log]{pv_pull_subprocess_log()}}'s \code{start_date}/\code{end_date}/\code{users}
+passthrough params).
+}
+\details{
+The process picker includes a leading "(All processes)" choice
+(an empty string) -- its default -- for tabs that can meaningfully
+show a portfolio-wide view (Users & roles' heatmap); a tab that
+can't (Process detail, App detail) just degrades to its own existing
+"no data yet" empty state until a real process is picked, the same
+way it already degrades for a process with no logged events.
 }

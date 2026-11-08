@@ -15,10 +15,23 @@ mod_filters_server(id, registry, refresh = shiny::reactive(NULL))
 re-read -- e.g. the "Refresh data" button's timestamp.}
 }
 \value{
-a list: \code{date_range} (a reactive giving the current
-\code{c(start, end)} \code{Date}s), \code{users} (a reactive giving a character
-vector of \code{user_id}s to keep, or \code{NULL} when neither a role nor a
-user is selected -- no filter).
+a list:
+\describe{
+\item{\code{date_range}}{a reactive giving the current \code{c(start, end)} \code{Date}s.}
+\item{\code{users}}{a reactive giving a character vector of \code{user_id}s
+to keep, or \code{NULL} when neither a role nor a user is selected --
+no filter.}
+\item{\code{process_id}}{a reactive giving the selected \code{process_id}, or
+a sentinel value (never a real \code{process_id}) for "(All processes)".}
+\item{\code{app}}{a reactive giving \code{list(process_id, subprocess)} for
+the selected app, or \code{NULL} if nothing is monitored yet.}
+\item{\code{set_process}}{a plain function, \code{set_process(process_id)} --
+jumps the shared picker to a process (e.g. from
+\code{\link[=mod_overview_server]{mod_overview_server()}}'s "Open business process").}
+\item{\code{set_app}}{a plain function, \code{set_app(list(process_id, subprocess))} --
+jumps the shared picker to a specific app (e.g. from
+\code{\link[=mod_business_detail_server]{mod_business_detail_server()}}'s "Open app detail").}
+}
 }
 \description{
 Server logic for the global sidebar filters

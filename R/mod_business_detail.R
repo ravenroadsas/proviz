@@ -24,13 +24,6 @@ pv_app_flow_card <- function(sub_row) {
 mod_business_detail_ui <- function(id) {
   ns <- shiny::NS(id)
   shiny::tagList(
-    bslib::card(
-      fill = FALSE,
-      bslib::card_body(
-        style = "padding-bottom: 4px;",
-        shiny::selectInput(ns("process_picker"), "Business process", choices = NULL, width = "100%")
-      )
-    ),
     shiny::uiOutput(ns("no_data_note")),
     bslib::card(
       fill = FALSE,
@@ -78,54 +71,39 @@ mod_business_detail_ui <- function(id) {
 #'
 #' @param id module id.
 #' @param registry a reactive returning the current [pv_load_registry()] result.
-#' @param selected_process a reactive giving a `process_id` to jump to (e.g.
-#'   from [mod_overview_server()]'s "Open business process"), or `NULL`.
 #' @param refresh a reactive (any value) bumped whenever logs should be
 #'   re-read.
-#' @param date_range,users reactives giving the dashboard's global
-#'   sidebar filters (see [mod_filters_server()]).
+#' @param date_range,users,process_id reactives giving the dashboard's
+#'   global sidebar filters (see [mod_filters_server()]). `process_id()`
+#'   is a sentinel value (never a real `process_id`) for "(All processes)"
+#'   -- this tab shows its usual "no data
+#'   yet" empty states in that case, same as for a real process with no
+#'   logged events, rather than picking one for itself.
 #' @return a list: `selected_app`, a reactive giving `list(process_id, subprocess)`
 #'   for the app detail tab to jump to (`NULL` until a row's "Open app detail"
 #'   is clicked).
 #' @export
-mod_business_detail_server <- function(id, registry, selected_process, refresh = shiny::reactive(NULL),
-                                        date_range = shiny::reactive(NULL), users = shiny::reactive(NULL)) {
+mod_business_detail_server <- function(id, registry, refresh = shiny::reactive(NULL),
+                                        date_range = shiny::reactive(NULL), users = shiny::reactive(NULL),
+                                        process_id = shiny::reactive(NULL)) {
   shiny::moduleServer(id, function(input, output, session) {
-    process_choices <- shiny::reactive({
-      shiny::req(registry())
-      procs <- registry()$processes[registry()$processes$status != "deprecated", ]
-      stats::setNames(procs$process_id, procs$process)
-    })
-
-    shiny::observe({
-      choices <- process_choices()
-      shiny::req(length(choices) > 0)
-      current <- if (!is.null(input$process_picker) && input$process_picker %in% choices) input$process_picker else choices[1]
-      shiny::updateSelectInput(session, "process_picker", choices = choices, selected = current)
-    })
-
-    shiny::observeEvent(selected_process(), {
-      shiny::req(selected_process())
-      shiny::updateSelectInput(session, "process_picker", selected = selected_process())
-    })
-
     process_subs <- shiny::reactive({
-      shiny::req(input$process_picker, registry())
-      registry()$subprocesses[registry()$subprocesses$process_id == input$process_picker, ]
+      shiny::req(registry())
+      registry()$subprocesses[registry()$subprocesses$process_id == process_id(), ]
     })
 
     raw_process_log <- shiny::reactive({
       refresh()
-      shiny::req(input$process_picker, registry())
+      shiny::req(registry())
       rng <- date_range()
-      pv_pull_process_log(registry(), input$process_picker, start_date = rng[1], end_date = rng[2], users = users())
+      pv_pull_process_log(registry(), process_id(), start_date = rng[1], end_date = rng[2], users = users())
     })
 
     kpis <- shiny::reactive({
       log <- raw_process_log()
       subs <- process_subs()
       conf_medians <- vapply(subs$subprocess, function(sp) {
-        conf <- pv_subprocess_conformance(registry(), input$process_picker, sp, log = log[log$subprocess == sp, ])
+        conf <- pv_subprocess_conformance(registry(), process_id(), sp, log = log[log$subprocess == sp, ])
         if (nrow(conf) == 0) NA_real_ else stats::median(conf$score, na.rm = TRUE)
       }, numeric(1))
       list(
@@ -137,13 +115,17 @@ mod_business_detail_server <- function(id, registry, selected_process, refresh =
     })
 
     completion <- shiny::reactive({
-      shiny::req(input$process_picker, registry())
+      shiny::req(registry())
       rng <- date_range()
-      pv_process_outcome_distribution(registry(), input$process_picker, start_date = rng[1], end_date = rng[2], users = users())
+      pv_process_outcome_distribution(registry(), process_id(), start_date = rng[1], end_date = rng[2], users = users())
     })
 
     output$no_data_note <- shiny::renderUI({
-      shiny::req(input$process_picker)
+      if (identical(process_id(), .pv_all_processes_sentinel) || is.null(process_id())) {
+        return(bslib::card(
+          bslib::card_body("Pick a business process in the sidebar filters to see its detail.", class = "text-muted")
+        ))
+      }
       if (nrow(raw_process_log()) == 0) {
         bslib::card(
           bslib::card_body("No events logged yet for this business process.", class = "text-muted")
@@ -184,7 +166,7 @@ mod_business_detail_server <- function(id, registry, selected_process, refresh =
     })
 
     output$app_metrics_table <- DT::renderDT({
-      pid <- input$process_picker
+      pid <- process_id()
       subs <- process_subs()
       shiny::validate(shiny::need(nrow(subs) > 0, "No apps scoped for this business process yet."))
 
@@ -217,7 +199,7 @@ mod_business_detail_server <- function(id, registry, selected_process, refresh =
       row <- input$app_metrics_table_rows_selected
       shiny::req(row)
       subs <- process_subs()
-      list(process_id = input$process_picker, subprocess = subs$subprocess[row])
+      list(process_id = process_id(), subprocess = subs$subprocess[row])
     })
 
     list(selected_app = selected_app)

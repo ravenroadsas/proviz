@@ -7,10 +7,10 @@
 mod_business_detail_server(
   id,
   registry,
-  selected_process,
   refresh = shiny::reactive(NULL),
   date_range = shiny::reactive(NULL),
-  users = shiny::reactive(NULL)
+  users = shiny::reactive(NULL),
+  process_id = shiny::reactive(NULL)
 )
 }
 \arguments{
@@ -18,14 +18,15 @@ mod_business_detail_server(
 
 \item{registry}{a reactive returning the current \code{\link[=pv_load_registry]{pv_load_registry()}} result.}
 
-\item{selected_process}{a reactive giving a \code{process_id} to jump to (e.g.
-from \code{\link[=mod_overview_server]{mod_overview_server()}}'s "Open business process"), or \code{NULL}.}
-
 \item{refresh}{a reactive (any value) bumped whenever logs should be
 re-read.}
 
-\item{date_range, users}{reactives giving the dashboard's global
-sidebar filters (see \code{\link[=mod_filters_server]{mod_filters_server()}}).}
+\item{date_range, users, process_id}{reactives giving the dashboard's
+global sidebar filters (see \code{\link[=mod_filters_server]{mod_filters_server()}}). \code{process_id()}
+is a sentinel value (never a real \code{process_id}) for "(All processes)"
+-- this tab shows its usual "no data
+yet" empty states in that case, same as for a real process with no
+logged events, rather than picking one for itself.}
 }
 \value{
 a list: \code{selected_app}, a reactive giving \code{list(process_id, subprocess)}

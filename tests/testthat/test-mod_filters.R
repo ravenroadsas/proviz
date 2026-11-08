@@ -46,3 +46,54 @@ test_that("mod_filters_server intersects an explicit user selection with a role 
     expect_equal(session$returned$users(), "alice") # bob is also an Analyst but wasn't picked
   })
 })
+
+test_that("pv_filters_process_app_choices scopes to one process's monitored apps, keyed by 'process_id::subprocess'", {
+  registry <- local_fixture_registry()
+  choices <- pv_filters_process_app_choices(registry, "type_curve_construction")
+  expect_equal(unname(choices), "type_curve_construction::type_curve_module")
+  expect_equal(names(choices), "typecurves")
+
+  expect_equal(pv_filters_process_app_choices(registry, "not_yet"), character(0))
+})
+
+test_that("pv_filters_all_app_choices labels every monitored app with its process, regardless of process", {
+  registry <- local_fixture_registry()
+  choices <- pv_filters_all_app_choices(registry)
+  expect_equal(unname(choices), "type_curve_construction::type_curve_module")
+  expect_equal(names(choices), "typecurves (Type Curve Construction)")
+})
+
+test_that("mod_filters_server defaults process_id to '(All processes)' and app() to its first monitored app", {
+  # updateSelectInput() has no real client to echo the default selection
+  # back into input$* under testServer() (the same documented limitation
+  # as test-mod_app_detail.R) -- set inputs directly, as the browser
+  # would after receiving the update that picks these defaults.
+  registry <- local_fixture_registry()
+
+  shiny::testServer(mod_filters_server, args = list(registry = shiny::reactiveVal(registry)), {
+    session$flushReact()
+    session$setInputs(process_picker = .pv_all_processes_sentinel, app_picker = "type_curve_construction::type_curve_module")
+    expect_equal(session$returned$process_id(), .pv_all_processes_sentinel)
+    expect_equal(session$returned$app(), list(process_id = "type_curve_construction", subprocess = "type_curve_module"))
+  })
+})
+
+test_that("mod_filters_server's app() parses the selected 'process_id::subprocess' composite value", {
+  registry <- local_fixture_registry()
+
+  shiny::testServer(mod_filters_server, args = list(registry = shiny::reactiveVal(registry)), {
+    session$flushReact()
+    session$setInputs(app_picker = "type_curve_construction::type_curve_module")
+    expect_equal(session$returned$app(), list(process_id = "type_curve_construction", subprocess = "type_curve_module"))
+  })
+})
+
+test_that("mod_filters_server's set_process/set_app are callable without error (client echo is testServer's known limitation)", {
+  registry <- local_fixture_registry()
+
+  shiny::testServer(mod_filters_server, args = list(registry = shiny::reactiveVal(registry)), {
+    session$flushReact()
+    expect_no_error(session$returned$set_process("type_curve_construction"))
+    expect_no_error(session$returned$set_app(list(process_id = "type_curve_construction", subprocess = "type_curve_module")))
+  })
+})

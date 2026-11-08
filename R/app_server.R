@@ -39,26 +39,29 @@ app_server <- function(initial_registry) {
       registry = registry, refresh = data_as_of, date_range = filters$date_range, users = filters$users
     )
     business_detail <- mod_business_detail_server("business_detail",
-      registry = registry, selected_process = overview$selected_process, refresh = data_as_of,
-      date_range = filters$date_range, users = filters$users
+      registry = registry, refresh = data_as_of,
+      date_range = filters$date_range, users = filters$users, process_id = filters$process_id
     )
     mod_app_detail_server("app_detail",
-      registry = registry, selected_app = business_detail$selected_app, refresh = data_as_of,
-      date_range = filters$date_range, users = filters$users
+      registry = registry, refresh = data_as_of,
+      date_range = filters$date_range, users = filters$users, app = filters$app
     )
     mod_heatmap_server("heatmap",
-      registry = registry, refresh = data_as_of, date_range = filters$date_range, users = filters$users
+      registry = registry, refresh = data_as_of, date_range = filters$date_range, users = filters$users,
+      process_id = filters$process_id, app = filters$app
     )
     mod_adoption_server("adoption", registry = registry, adoption = adoption, refresh = data_as_of)
 
     shiny::observeEvent(overview$selected_process(), {
       shiny::req(overview$selected_process())
+      filters$set_process(overview$selected_process())
       bslib::nav_select("main_nav", "business_process", session = session)
       bslib::nav_select("business_process_nav", "process_detail", session = session)
     })
 
     shiny::observeEvent(business_detail$selected_app(), {
       shiny::req(business_detail$selected_app())
+      filters$set_app(business_detail$selected_app())
       bslib::nav_select("main_nav", "business_process", session = session)
       bslib::nav_select("business_process_nav", "app_detail", session = session)
     })

@@ -1,23 +1,3 @@
-#' Business processes that have at least one monitored app -- the app
-#' detail tab's own process picker only offers these, since there's
-#' nothing to deep-dive into otherwise.
-#' @noRd
-pv_app_detail_process_choices <- function(registry) {
-  subs <- registry$subprocesses
-  monitored_ids <- unique(subs$process_id[!is.na(subs$log_path)])
-  procs <- registry$processes[registry$processes$process_id %in% monitored_ids, ]
-  stats::setNames(procs$process_id, procs$process)
-}
-
-#' A process's monitored app(s).
-#' @noRd
-pv_app_detail_app_choices <- function(registry, process_id) {
-  subs <- registry$subprocesses[
-    registry$subprocesses$process_id == process_id & !is.na(registry$subprocesses$log_path),
-  ]
-  stats::setNames(subs$subprocess, subs$app)
-}
-
 #' App detail tab: one app's own process, filtered, in depth
 #'
 #' The deepest level: one specific app's own step diagram, mined from
@@ -28,16 +8,6 @@ pv_app_detail_app_choices <- function(registry, process_id) {
 mod_app_detail_ui <- function(id) {
   ns <- shiny::NS(id)
   shiny::tagList(
-    bslib::card(
-      fill = FALSE,
-      bslib::card_body(
-        style = "padding-bottom: 4px;",
-        shiny::fluidRow(
-          shiny::column(6, shiny::selectInput(ns("process_picker"), "Business process", choices = NULL, width = "100%")),
-          shiny::column(6, shiny::selectInput(ns("app_picker"), "App", choices = NULL, width = "100%"))
-        )
-      )
-    ),
     shiny::uiOutput(ns("no_data_note")),
     shiny::div(
       class = "pv-kpi-row",
@@ -101,67 +71,27 @@ mod_app_detail_ui <- function(id) {
 #'
 #' @param id module id.
 #' @param registry a reactive returning the current [pv_load_registry()] result.
-#' @param selected_app a reactive giving `list(process_id, subprocess)` to
-#'   jump to (e.g. from [mod_business_detail_server()]'s "Open app
-#'   detail"), or `NULL`.
 #' @param refresh a reactive (any value) bumped whenever logs should be
 #'   re-read.
-#' @param date_range,users reactives giving the dashboard's global
-#'   sidebar filters (see [mod_filters_server()]).
+#' @param date_range,users,app reactives giving the dashboard's global
+#'   sidebar filters (see [mod_filters_server()]). `app()` is
+#'   `list(process_id, subprocess)`, or `NULL` if nothing is monitored
+#'   yet -- this tab shows its usual "no data yet" empty state then.
 #' @export
-mod_app_detail_server <- function(id, registry, selected_app, refresh = shiny::reactive(NULL),
-                                   date_range = shiny::reactive(NULL), users = shiny::reactive(NULL)) {
+mod_app_detail_server <- function(id, registry, refresh = shiny::reactive(NULL),
+                                   date_range = shiny::reactive(NULL), users = shiny::reactive(NULL),
+                                   app = shiny::reactive(NULL)) {
   shiny::moduleServer(id, function(input, output, session) {
-    pending_jump <- shiny::reactiveVal(NULL)
-
-    shiny::observe({
-      shiny::req(registry())
-      choices <- pv_app_detail_process_choices(registry())
-      shiny::req(length(choices) > 0)
-      current <- if (!is.null(input$process_picker) && input$process_picker %in% choices) input$process_picker else choices[1]
-      shiny::updateSelectInput(session, "process_picker", choices = choices, selected = current)
-    })
-
-    shiny::observeEvent(selected_app(), {
-      sel <- selected_app()
-      shiny::req(sel, registry())
-      pending_jump(sel)
-      shiny::updateSelectInput(session, "process_picker",
-        choices = pv_app_detail_process_choices(registry()), selected = sel$process_id
-      )
-    })
-
-    shiny::observeEvent(input$process_picker, {
-      shiny::req(registry(), input$process_picker)
-      choices <- pv_app_detail_app_choices(registry(), input$process_picker)
-      shiny::req(length(choices) > 0)
-
-      pj <- pending_jump()
-      target_app <- NULL
-      if (!is.null(pj) && pj$process_id == input$process_picker && pj$subprocess %in% choices) {
-        target_app <- pj$subprocess
-      }
-      current <- if (!is.null(target_app)) {
-        target_app
-      } else if (!is.null(input$app_picker) && input$app_picker %in% choices) {
-        input$app_picker
-      } else {
-        choices[1]
-      }
-      shiny::updateSelectInput(session, "app_picker", choices = choices, selected = current)
-      pending_jump(NULL)
-    }, ignoreNULL = TRUE)
-
     raw_log <- shiny::reactive({
       refresh()
-      shiny::req(input$process_picker, input$app_picker, registry())
+      shiny::req(registry(), app())
       rng <- date_range()
-      pv_pull_subprocess_log(registry(), input$process_picker, input$app_picker, start_date = rng[1], end_date = rng[2], users = users())
+      pv_pull_subprocess_log(registry(), app()$process_id, app()$subprocess, start_date = rng[1], end_date = rng[2], users = users())
     })
 
     diagram <- shiny::reactive({
-      shiny::req(input$process_picker, input$app_picker, registry())
-      registry()$subprocess_diagrams[[paste(input$process_picker, input$app_picker, sep = "::")]]
+      shiny::req(registry(), app())
+      registry()$subprocess_diagrams[[paste(app()$process_id, app()$subprocess, sep = "::")]]
     })
 
     filtered_log <- shiny::reactive(raw_log())
@@ -169,7 +99,11 @@ mod_app_detail_server <- function(id, registry, selected_app, refresh = shiny::r
     kpis <- shiny::reactive(pv_process_kpis(filtered_log(), diagram()))
 
     output$no_data_note <- shiny::renderUI({
-      shiny::req(input$process_picker, input$app_picker)
+      if (is.null(app())) {
+        return(bslib::card(
+          bslib::card_body("No app is monitored yet -- pick a business process with a monitored app in the sidebar filters.", class = "text-muted")
+        ))
+      }
       if (nrow(raw_log()) == 0) {
         bslib::card(
           bslib::card_body("No events logged yet for this app.", class = "text-muted")

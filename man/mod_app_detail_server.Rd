@@ -7,10 +7,10 @@
 mod_app_detail_server(
   id,
   registry,
-  selected_app,
   refresh = shiny::reactive(NULL),
   date_range = shiny::reactive(NULL),
-  users = shiny::reactive(NULL)
+  users = shiny::reactive(NULL),
+  app = shiny::reactive(NULL)
 )
 }
 \arguments{
@@ -18,15 +18,13 @@ mod_app_detail_server(
 
 \item{registry}{a reactive returning the current \code{\link[=pv_load_registry]{pv_load_registry()}} result.}
 
-\item{selected_app}{a reactive giving \code{list(process_id, subprocess)} to
-jump to (e.g. from \code{\link[=mod_business_detail_server]{mod_business_detail_server()}}'s "Open app
-detail"), or \code{NULL}.}
-
 \item{refresh}{a reactive (any value) bumped whenever logs should be
 re-read.}
 
-\item{date_range, users}{reactives giving the dashboard's global
-sidebar filters (see \code{\link[=mod_filters_server]{mod_filters_server()}}).}
+\item{date_range, users, app}{reactives giving the dashboard's global
+sidebar filters (see \code{\link[=mod_filters_server]{mod_filters_server()}}). \code{app()} is
+\code{list(process_id, subprocess)}, or \code{NULL} if nothing is monitored
+yet -- this tab shows its usual "no data yet" empty state then.}
 }
 \description{
 Server logic for the app detail tab
