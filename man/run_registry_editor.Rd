@@ -38,6 +38,10 @@ transitions (its own diagram) and named outcomes.
 \item \strong{Users & roles}: declare (or update) a user's role -- the
 one piece of resource metadata not in the real event log itself,
 needed for the dashboard's role filter.
+\item \strong{Export}: write the click map out as a telemetry config --
+a pinned JSON resource (see the \code{pins} package) a real app's own
+instrumentation can fetch -- for every app with at least one
+declared click.
 }
 }
 \details{

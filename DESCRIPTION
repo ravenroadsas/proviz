@@ -29,6 +29,7 @@ Imports:
     utils
 Suggests:
     openxlsx,
+    pins,
     readxl,
     testthat (>= 3.0.0),
     withr

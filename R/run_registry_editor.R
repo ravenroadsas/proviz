@@ -23,6 +23,10 @@
 #'   \item **Users & roles**: declare (or update) a user's role -- the
 #'     one piece of resource metadata not in the real event log itself,
 #'     needed for the dashboard's role filter.
+#'   \item **Export**: write the click map out as a telemetry config --
+#'     a pinned JSON resource (see the `pins` package) a real app's own
+#'     instrumentation can fetch -- for every app with at least one
+#'     declared click.
 #' }
 #'
 #' v1 is deliberately append-only (no delete/rename yet). Every write
@@ -45,7 +49,8 @@ run_registry_editor <- function(registry_path, ...) {
     bslib::nav_panel("Process flow", pv_registry_editor_processflow_ui("processflow")),
     bslib::nav_panel("Scan & map steps", pv_registry_editor_scan_ui("scan")),
     bslib::nav_panel("Steps & outcomes", pv_registry_editor_steps_ui("steps")),
-    bslib::nav_panel("Users & roles", pv_registry_editor_roles_ui("roles"))
+    bslib::nav_panel("Users & roles", pv_registry_editor_roles_ui("roles")),
+    bslib::nav_panel("Export", pv_registry_editor_export_ui("export"))
   )
 
   server <- function(input, output, session) {
@@ -62,6 +67,7 @@ run_registry_editor <- function(registry_path, ...) {
     pv_registry_editor_scan_server("scan", registry_path, registry, touch)
     pv_registry_editor_steps_server("steps", registry_path, registry, touch)
     pv_registry_editor_roles_server("roles", registry_path, registry, touch)
+    pv_registry_editor_export_server("export", registry_path, registry, touch)
   }
 
   shiny::runApp(shiny::shinyApp(ui, server), ...)
@@ -556,6 +562,79 @@ pv_registry_editor_roles_server <- function(id, registry_path, registry, touch) 
         pv_registry_db_upsert_user_role(registry_path, input$user_id, input$role)
         shiny::showNotification(paste0("Set role for '", input$user_id, "'"), type = "message")
         touch()
+      })
+    })
+  })
+}
+
+## -------------------------------------------------------------------------
+## Tab 6: Export (telemetry config -> pinned JSON)
+## -------------------------------------------------------------------------
+
+#' @noRd
+pv_registry_editor_export_ui <- function(id) {
+  ns <- shiny::NS(id)
+  shiny::fluidRow(
+    shiny::column(
+      5,
+      bslib::card(
+        bslib::card_header("Export telemetry config"),
+        shiny::helpText(
+          "Every app's click -> step bindings (selector/kind/feature/event/weight), ready for that ",
+          "app's own instrumentation to read -- an app with no clicks mapped yet is skipped. Saved as ",
+          "a pinned JSON resource (see the pins package) so a recorder can always fetch the latest version."
+        ),
+        shiny::textInput(ns("board_path"), "Pin board folder", value = ""),
+        shiny::textInput(ns("pin_name"), "Pin name", value = "telemetry_config"),
+        shiny::actionButton(ns("export"), "Export to pin", class = "btn-primary")
+      )
+    ),
+    shiny::column(
+      7,
+      bslib::card(bslib::card_header("Apps included in the export"), DT::DTOutput(ns("preview_table")))
+    )
+  )
+}
+
+#' @noRd
+pv_registry_editor_export_server <- function(id, registry_path, registry, touch) {
+  shiny::moduleServer(id, function(input, output, session) {
+    shiny::observe({
+      shiny::updateTextInput(session, "board_path", value = file.path(dirname(registry_path), "pins"))
+    })
+
+    config <- shiny::reactive({
+      shiny::req(registry())
+      pv_telemetry_config(registry())
+    })
+
+    output$preview_table <- DT::renderDT({
+      cfg <- config()
+      shiny::validate(shiny::need(length(cfg) > 0, "No app has a declared click yet -- use Scan & map steps first."))
+      rows <- lapply(cfg, function(a) {
+        data.frame(
+          App = a$app, Process = a$process_id, Subprocess = a$subprocess,
+          Clicks = nrow(a$clicks), stringsAsFactors = FALSE
+        )
+      })
+      DT::datatable(do.call(rbind, rows), rownames = FALSE, options = list(dom = "t"), class = "compact stripe")
+    })
+
+    shiny::observeEvent(input$export, {
+      pv_registry_editor_notify_error({
+        shiny::req(input$board_path, input$pin_name, registry())
+        if (!requireNamespace("pins", quietly = TRUE)) {
+          stop("The 'pins' package isn't installed -- install it to export telemetry configs (install.packages(\"pins\")).", call. = FALSE)
+        }
+        if (length(config()) == 0) {
+          stop("No app has a declared click yet -- nothing to export.", call. = FALSE)
+        }
+        dir.create(input$board_path, recursive = TRUE, showWarnings = FALSE)
+        board <- pins::board_folder(input$board_path)
+        pv_export_telemetry_config(registry(), board, name = input$pin_name)
+        shiny::showNotification(
+          paste0("Exported '", input$pin_name, "' to ", input$board_path), type = "message"
+        )
       })
     })
   })
